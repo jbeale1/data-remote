@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 
+# Send data from UDP network packets out to serial port
+# 18-Sep-2022 J.Beale
+
 # UDP part based on
 # http://sfriederichs.github.io/how-to/python/udp/2017/12/07/UDP-Communication.html
 
@@ -9,7 +12,7 @@ from time import sleep        # delay the right amount
 import serial                 # send data to serial port
 import sys
 
-serPort = 'COM3'   # serial port to receive data from network
+serPort = 'COM3'   # serial port to receive data coming from network
 
 exit = False
 
@@ -59,7 +62,7 @@ def main(args):
         
     sleep(.1)
           
-    while True:
+    while (not exit):
         try:
             sleep(.2)
             
