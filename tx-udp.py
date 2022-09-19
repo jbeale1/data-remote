@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# This code runs on RPi (ADI Kuiper Linux) sending data out via UDP
+# send local data to remote host via UDP network packets
 # 18-Sep-2022 J.Beale
 
 # Older python2 version originally from
@@ -17,14 +17,12 @@ remote_host = "192.168.1.154" # JPB laptop
 portNum = 8000  # an arbitrary choice of port number
 packetSize = 10   # how many values to send at one time
 
+
 points = 300  # how many data points in one wave
 pi2 = 2 * 3.14159265358979323  #  2 * Pi
 off = 0.0;  # phase offset #1
 off2 = 0.0; # phase offset #2
 
-def txThread(portNum):
-    global exit
-    
 def newValue(i):
         global off, off2
 
@@ -33,24 +31,22 @@ def newValue(i):
         off2 += 0.001;
         y = math.sin(x) + 0.4 * math.sin((x+off)*3) + 0.2 * math.sin((x+off2)*2)
         outs = "{:.6f}".format(y) + "\n"  # float to string
-        return outs       # return value as string 
+        return outs       # return value as string
 
-    
-def main(args):    
+def main(args):
     global exit
     print("UDP Tx test")
     print("Press Ctrl+C to exit")
     print("")
-    
-   
+
     sleep(.1)
-    
+
     #Generate a transmit socket object
     txSocket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-    
+
     #Do not block when looking for received data (see above note)
-    txSocket.setblocking(0) 
-   
+    txSocket.setblocking(0)
+
     i = 0
     print("Transmitting to " + remote_host + ": " + str(portNum))
     while True:
@@ -65,19 +61,17 @@ def main(args):
 
             #Transmit string as bytes to the local server on the agreed-upon port
             txSocket.sendto(txString.encode(),(remote_host,portNum))
-        except socket.error as msg:    
+        except socket.error as msg:
             #If no data is received you end up here, but you can ignore
             #the error and continue
-            pass   
+            pass
         except KeyboardInterrupt:
             exit = True
             print("Received Ctrl+C... initiating exit")
             break
         sleep(.2)
-         
-    udpRxThreadHandle.join()
-        
+
     return
 
 if __name__=="__main__":
-    main(sys.argv[1:0])     
+    main(sys.argv[1:0])
