@@ -46,7 +46,7 @@ def main(args):
     txSocket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 
     #Do not block when looking for received data (see above note)
-    txSocket.setblocking(0)
+    #txSocket.setblocking(0)
 
     print("Transmitting to " + remote_host + ": " + str(portNum))
     while True:
@@ -61,7 +61,7 @@ def main(args):
             # Transmit string as bytes to the local server on the agreed-upon port
             if (len(txString) > 0):
                 txSocket.sendto(txString.encode(),(remote_host,portNum))
-                print(".",end='',flush=True)
+                # print(".",end='',flush=True)
 
         except socket.error as msg:
             # If no data is received you end up here, but you can ignore
@@ -71,7 +71,7 @@ def main(args):
             exit = True
             print("Received Ctrl+C... initiating exit")
             break
-        sleep(.02)
+        sleep(.2)
 
     return
 
