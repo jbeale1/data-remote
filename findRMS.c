@@ -25,7 +25,6 @@ int main(void)
   double sMax = -9E99;
   double sMin = 9E99;
   double datSum = 0;
-  double sumsq = 0; // initialize running squared sum of differences
   long   n = 0;    // no data yet
   double mean = 0; // start off with running mean at zero
   double m2 = 0;
