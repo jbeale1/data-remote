@@ -49,8 +49,8 @@ int main(void)
   double variance = m2/(n-1);  // (n-1):Sample Variance  (n): Population Variance
   double stdev = sqrt(variance);  // Calculate standard deviation
 
-  printf("Count: %d Mean: %9.3f Stdev: %9.3f ", n, mean, stdev);
-  printf("Min: %9.2f  Max: %9.2f \n", n, sMin, sMax);
+  printf("Count: %ld Mean: %9.3f Stdev: %9.3f ", n, mean, stdev);
+  printf("Min: %9.2f  Max: %9.2f \n", sMin, sMax);
 
   free(line);
   return 0;
