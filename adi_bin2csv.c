@@ -19,16 +19,17 @@ void main(int argc, char **argv ) {
   size_t bytes_read;
   int p = 0;                 // pointer into buffer
 
-  bytes_read = fread(buffer,sizeof(buffer[0]),4,stdin); // read 4 bytes
-  while (bytes_read == ws) {
+  while ( 1 ) {
+      bytes_read = fread(buffer,sizeof(buffer[0]),4,stdin); // read 4 bytes
+      if (bytes_read != ws) {
+          break;   // exit if we have reached end of pipe / file
+      }
       b4 = buffer[p];
       b3 = buffer[p+1];
       b2 = buffer[p+2];
       b1 = buffer [p+3];
       raw = b4*(1<<24) + b3*(1<<16) + b2*(1<<8) + b1;
       printf("%d\n",raw);
-
-      bytes_read = fread(buffer,sizeof(buffer[0]),4,stdin); // read 4 bytes
   };
 
 }
