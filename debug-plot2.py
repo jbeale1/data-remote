@@ -42,6 +42,7 @@ my_ad7124 = initADC(rate, samples)
 # r12: (2nd-order + higher-order RMS) / (higher-order RMS)
 print("date, dT, n, avg, delta, slope, p2, stdev, r12")
 
+frameNum = 0
 while ( True ):
     data_raw = my_ad7124.rx()
 
@@ -68,9 +69,9 @@ while ( True ):
     datString = "y: %.0f  dY: %.4f  d2y: %.3f" % (mean/100, slope, p2[0]*1E4)
     deltaT = (now - lastTime).total_seconds()
     
-    print(now,end=", ")
-    print("%.3f, %d, %.0f, %.0f, %.4f, %.3f, %.2f, %.4f" % 
-          (deltaT, len(y), mean, delta, slope, p2[0]*1E4, std1, cRate))
+    # print(now,end=", ")
+    print("%s, %.3f, %d, %.0f, %.0f, %.4f, %.3f, %.2f, %.4f" % 
+          (timeString, deltaT, len(y), mean, delta, slope, p2[0]*1E4, std1, cRate))
     lastMean = mean
     lastTime = now
 
@@ -98,5 +99,8 @@ while ( True ):
     ax.text(xpos3,ypos, datString, fontsize=10)
     fig.canvas.draw()
     fig.canvas.flush_events()
+    outname = "%05d.png" % frameNum
+    fig.savefig(outname)
+    frameNum += 1
 
 del my_ad7124 # Clean up
