@@ -14,15 +14,16 @@ import datetime
 import csv      # write data to CSV file
 import math     # for constant 'e'
 
+setDur = 2.0       # duration of 1 set in seconds
 rate = 1000        # readings per second
-samples = 2000     # a few seconds worth 
-R = 500            # average this many points together before saving
+samples = int(setDur * rate) # record this many points at one time
+R = 100            # decimation ratio: points averaged together before saving
 
 datfile = "tdat.csv"  # save ADC readings
 my_ip = "ip:analog.local" # local RPi with ADC
 
-figW = 14          # matplotlib plot size, inches
-figH = figW * 9/16 # height in inches
+figW = 12          # matplotlib plot size, inches
+figH = figW * 12/16 # height in inches
 
 # ----------------------------------------------------    
 # set up ADC chip through Pyadi-iio system
@@ -56,11 +57,14 @@ def calcTemp(rawADC):
     
 # ----------------------------------------------------    
 plt.ion()
-fig = plt.figure()
+#fig = plt.figure()
+fig, (ax, ax2) = plt.subplots(2, 1)
 fig.set_size_inches(figW, figH)
-ax = fig.add_subplot(111)
+# ax = fig.add_subplot(111)
 lastMean = 0
 lastTime = datetime.datetime.now()
+dataLog = np.array([])  # log for sub-sampled data
+
 my_ad7124 = initADC(rate, samples)
 
 # do the first run but ignore it, due to RC start transient
@@ -80,14 +84,18 @@ with open(datfile, "a") as fout:  # append each batch of readings
   frameNum = 0
   while ( True ):
     data_raw = my_ad7124.rx()
+    frameNum += 1
 
     fmt = "%dI" % samples
     yr = np.array( list(unpack(fmt, data_raw)) )
     y = calcTemp(yr)  # convert raw readings into Temp, deg.C
+    totalDur = frameNum * setDur  # total seconds recorded so far
     
+    # save out downsampled version of data to a file on disk
     yD = y.reshape(-1, R).mean(axis=1) # average each set of R values
-    np.savetxt(fout, yD, fmt='%0.5f')  # save out readings
+    np.savetxt(fout, yD, fmt='%0.5f')  # save out readings to disk
     fout.flush()  # update file on disk
+    dataLog = np.append(dataLog, yD)  # save data in array
         
     x = np.arange(1,len(y)+1)
     slope,offset = np.polyfit(x, y, 1)  # find best-fit line
@@ -107,18 +115,21 @@ with open(datfile, "a") as fout:  # append each batch of readings
     timeString = now.strftime('%Y-%m-%d %H:%M:%S')
     srString = "Change: %.4f" % cRate
     datString = ("Temp vs Time      T: %.3f°C   dT: %.2f mC/s   d2T:%.3f" %
-        (mean, slope*1E5, p2[0]*1E9) )
-    dtString = ("%.2f" % (slope*1E5))
+        (mean, slope*rate*1E3, p2[0]*rate*rate*1E5) )
+    dtString = ("%.2f" % (slope*rate*1E3))
     deltaT = (now - lastTime).total_seconds()
     
-    print("%s, %.3f, %.4f, %.1f, %.4f, %.3f, %.2f, %.4f" % 
-          (timeString, deltaT, mean, delta*1E3, slope*1E5, p2[0]*1E9, std1*1E3, cRate))
+    #print("%s, %.3f, %.4f, %.1f, %.4f, %.3f, %.2f, %.4f" % 
+    #      (timeString, deltaT, mean, delta*1E3, slope*rate*1E3, 
+    #      p2[0]*rate*rate*1E5, std1*1E3, cRate))
     lastMean = mean
     lastTime = now
 
     # ---- display graph of data, trend, curve fit
-    plt.cla()     # clear any previous data
-    ax.scatter(x,y,s=2, color="green")  # show samples as points
+    #plt.cla()     # clear any previous data (worked with 1 plot only)
+    ax.clear()      # clear entire first plot
+    ax2.clear()
+    ax.scatter(x,y,s=1, color="green")  # show samples as points
     ax.plot(x, (base1(x) + base2(x)), color="red")    # quadratic best-fit as curve
     #ax.plot(x, slope*x+offset, color="blue")    # linear best-fit as line
     ax.plot(x, base1(x), color="blue")    # linear best-fit as line
@@ -138,10 +149,15 @@ with open(datfile, "a") as fout:  # append each batch of readings
     xpos = xmin + 0.85*xrange
     xpos3 = xmin + 0.15*xrange
     ypos = ymin + 1.01*yrange
-    ypos2 = ymin + 0.95*yrange
-    xpos4 = xmin + 0.55*xrange
+    ypos2 = ymin + 0.9*yrange     # was 0.95
+    xpos4 = xmin + 0.5*xrange
     ypos4 = ymin + 0.03*yrange
-    
+
+    x2 = np.arange(0,totalDur,totalDur/len(dataLog))
+    ax2.plot(x2, dataLog)   # plot of past data
+    ax2.set_xlabel("seconds", fontsize = 12)
+    ax2.grid(color='gray', linestyle='dotted' )
+    # print(frameNum, len(dataLog))
     
     ax.text(xpos,ypos, timeString, style='italic')
     ax.text(xpos,ypos2, srString, fontsize=11, bbox={'facecolor': 'white', 'pad': 5})
@@ -151,7 +167,6 @@ with open(datfile, "a") as fout:  # append each batch of readings
     fig.canvas.flush_events()
     #outname = "%05d.png" % frameNum  # save out screen image
     #fig.savefig(outname)
-    frameNum += 1
 
     
   del my_ad7124 # Clean up
