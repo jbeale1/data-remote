@@ -2,7 +2,7 @@
 
 # Measure thermistor with AD7124 ADC chip
 # record and plot data, curve fit, stats
-# J.Beale 24-Sep-2022
+# J.Beale 26-Sep-2022
 
 import adi
 import matplotlib.pyplot as plt
@@ -14,8 +14,8 @@ import csv      # write data to CSV file
 import math     # for constant 'e'
 
 rate = 100        # readings per second
-samples = 502     # about 5 seconds worth 
-R = 1             # integer downsample ratio (unused)
+samples = 500     # about 5 seconds worth 
+R = 50            # average this many together before saving
 
 datfile = "tdat.csv"  # save ADC readings
 my_ip = "ip:analog.local" # local RPi with ADC
@@ -84,10 +84,8 @@ with open(datfile, "a") as fout:  # append each batch of readings
     yr = np.array( list(unpack(fmt, data_raw)) )
     y = calcTemp(yr)  # convert raw readings into Temp, deg.C
     
-    # yH = 2**24 - yr  # y data at higher sampling rate
-    #yH = yr
-    #y = yH.reshape(-1, R).mean(axis=1)  # downsample by factor R
-    np.savetxt(fout, y, fmt='%0.4f')  # save out readings
+    yD = y.reshape(-1, R).mean(axis=1) # average each set of R values
+    np.savetxt(fout, yD, fmt='%0.5f')  # save out readings
     fout.flush()  # update file on disk
         
     x = np.arange(1,len(y)+1)
@@ -109,6 +107,7 @@ with open(datfile, "a") as fout:  # append each batch of readings
     srString = "Change: %.4f" % cRate
     datString = ("Temp vs Time (5 sec)   T: %.3f°C   dT: %.2f mC/s   d2T:%.3f" %
         (mean, slope*1E5, p2[0]*1E9) )
+    dtString = ("%.2f" % (slope*1E5))
     deltaT = (now - lastTime).total_seconds()
     
     print("%s, %.3f, %.4f, %.1f, %.4f, %.3f, %.2f, %.4f" % 
@@ -134,10 +133,14 @@ with open(datfile, "a") as fout:  # append each batch of readings
     xpos3 = xmin + 0.1*xrange
     ypos = ymin + 1.01*yrange
     ypos2 = ymin + 0.95*yrange
+    xpos4 = xmin + 0.55*xrange
+    ypos4 = ymin + 0.03*yrange
+    
     
     ax.text(xpos,ypos, timeString, style='italic')
     ax.text(xpos,ypos2, srString, fontsize=11, bbox={'facecolor': 'white', 'pad': 5})
     ax.text(xpos3,ypos, datString, fontsize=15)
+    ax.text(xpos4,ypos4, dtString, fontsize=110, color="grey", fontweight="bold", alpha=0.15)
     fig.canvas.draw()
     fig.canvas.flush_events()
     #outname = "%05d.png" % frameNum  # save out screen image
