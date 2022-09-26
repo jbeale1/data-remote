@@ -140,7 +140,7 @@ with open(datfile, "a") as fout:  # append each batch of readings
     ax.text(xpos,ypos, timeString, style='italic')
     ax.text(xpos,ypos2, srString, fontsize=11, bbox={'facecolor': 'white', 'pad': 5})
     ax.text(xpos3,ypos, datString, fontsize=15)
-    ax.text(xpos4,ypos4, dtString, fontsize=110, color="grey", fontweight="bold", alpha=0.15)
+    ax.text(xpos4,ypos4, dtString, fontsize=110, color="grey", fontweight="bold", alpha=0.1)
     fig.canvas.draw()
     fig.canvas.flush_events()
     #outname = "%05d.png" % frameNum  # save out screen image
