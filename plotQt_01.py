@@ -34,7 +34,7 @@ def initADC(rate, samples):
   adc1.sample_rate = rate  # sets sample rate for all channels
   adc1.rx_buffer_size = samples
   adc1.rx_enabled_channels = [ad_channel]
-  adc1._ctx.set_timeout(1000000)
+  adc1._ctx.set_timeout(1000000)  # in what units is this?
   return adc1
   
 # ----------------------------------------------------    
@@ -55,7 +55,7 @@ def calcTemp(rawADC):
 
 class MplCanvas(FigureCanvasQTAgg):
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=9, height=7, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
@@ -66,38 +66,44 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
 
-        self.canvas = MplCanvas(self, width=9, height=4, dpi=100)
-        self.setCentralWidget(self.canvas)
+        self.setWindowTitle("ADC Plot v0.1")
+        width = 1000  # fixed width of window
+        height = 700
+        self.setFixedWidth(width)
+        self.setFixedHeight(height)
+        
+        self.canvas = MplCanvas(self)
         self._adc1 = initADC(rate, samples)  # initialize ADC chip        
-
-        #data_raw = self._adc1.rx()
-        #fmt = "%dI" % samples
-        #yr = np.array( list(unpack(fmt, data_raw)) )
-        #self.ydata = calcTemp(yr)  # convert raw readings into Temp, deg.C
-        #self.xdata = np.arange(1,len(self.ydata)+1)  # create a matching X axis
 
         self._plot_ref = None
         self.update_plot()
-        self.show()
+        self.show()              
         
-        #data_raw = adc1.rx() # ignore first run (RC transient)
-        
+        # set up GUI layout
+        btnLayout = QtWidgets.QHBoxLayout()  # a horizontal bar of button controls
+        btnLayout.addWidget(QtWidgets.QPushButton('Start'))
+        btnLayout.addWidget(QtWidgets.QPushButton('Pause'))        
+        btnLayout.addWidget(QtWidgets.QPushButton('Record'))        
+        btnLayout.addWidget(QtWidgets.QPushButton('Reset Plot'))
 
-        # Create toolbar, passing canvas as first parament, parent (self, the MainWindow) as second.
+        graphLayout = QtWidgets.QVBoxLayout()   # graph with its toollbar at top
         toolbar = NavigationToolbar(self.canvas, self)
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(toolbar)
-        layout.addWidget(self.canvas)
+        graphLayout.addWidget(toolbar)
+        graphLayout.addWidget(self.canvas)
         
+        outerLayout = QtWidgets.QVBoxLayout()
+        outerLayout.addLayout(btnLayout)
+        outerLayout.addLayout(graphLayout)
+        
+        widget = QtWidgets.QWidget(self)
+        widget.setLayout(outerLayout)        
+        self.setCentralWidget(widget)
+                
         # Setup a timer to trigger the redraw by calling update_plot.
         self.timer = QtCore.QTimer()
-        self.timer.setInterval(8000)
+        self.timer.setInterval(int(setDur*1000))  # update after this many milliseconds
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start()
-        
-        #while ( True ):
-                    
+        self.timer.start()                           
         
     def update_plot(self):        
         data_raw = self._adc1.rx()
@@ -114,6 +120,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas.axes.grid(color='gray', linestyle='dotted' )
         self.canvas.draw()   # redraw plot on canvas       
 
+# ---------------------------------------------------------------
 app = QtWidgets.QApplication(sys.argv)
 w = MainWindow()
 app.exec_()
