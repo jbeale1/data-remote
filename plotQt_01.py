@@ -4,13 +4,13 @@
 
 import sys
 import matplotlib
+import matplotlib.pyplot
 import adi         # Pyadi-iio interface to AD7124 ADC
 import numpy as np # array manipulations
 from struct import unpack  # extract words from packed binary buffer
 import math     # for constant 'e'
 
 matplotlib.use('Qt5Agg')
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 # ----------------------------------------------------    
 # Configure ADC settings
 
-setDur = 8.0       # duration of 1 set in seconds
+setDur = 2.0       # duration of 1 set in seconds
 rate = 100        # readings per second
 samples = int(setDur * rate) # record this many points at one time
 R = 100            # decimation ratio: points averaged together before saving
@@ -56,8 +56,10 @@ def calcTemp(rawADC):
 class MplCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None, width=9, height=7, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
+        fig, (self.axes, self.ax2) = matplotlib.pyplot.subplots(2,1) # two plots vertically
+        fig.set_size_inches(width, height)
+        # fig = Figure(figsize=(width, height), dpi=dpi)
+        # self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
 
@@ -66,7 +68,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
 
-        self.setWindowTitle("ADC Plot v0.1")
+        self.setWindowTitle("ADC Plot v0.11")
         width = 1000  # fixed width of window
         height = 700
         self.setFixedWidth(width)
@@ -75,6 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas = MplCanvas(self)
         self._adc1 = initADC(rate, samples)  # initialize ADC chip        
 
+        self.dataLog = np.array([])  # log for sub-sampled data
         self._plot_ref = None
         self.update_plot()
         self.show()              
@@ -109,15 +112,26 @@ class MainWindow(QtWidgets.QMainWindow):
         data_raw = self._adc1.rx()
         fmt = "%dI" % samples
         yr = np.array( list(unpack(fmt, data_raw)) )
-        self.ydata = calcTemp(yr)  # convert raw readings into Temp, deg.C        
+        self.ydata = calcTemp(yr)  # convert raw readings into Temp, deg.C  
+        self.dataLog = np.append(self.dataLog, self.ydata)  # save data in array        
 
         if self._plot_ref is None:
             self.xdata = np.arange(1,len(self.ydata)+1)  # create a matching X axis
 
         self.canvas.axes.cla()  # clear old data
-        self.canvas.axes.plot(self.xdata, self.ydata)
+        # self.canvas.axes.plot(self.xdata, self.ydata)
         self.canvas.axes.scatter(self.xdata,self.ydata,s=1, color="green")  # show samples as points
         self.canvas.axes.grid(color='gray', linestyle='dotted' )
+        self.canvas.axes.set_xlabel("samples", fontsize = 10)
+        
+        totalPoints = len(self.dataLog)
+        x2 = np.arange(totalPoints)
+        x2 = x2 * setDur/samples
+        self.canvas.ax2.cla()  # clear old data
+        self.canvas.ax2.plot(x2, self.dataLog)   # plot of accumulated past data
+        self.canvas.ax2.set_xlabel("seconds", fontsize = 10)
+        self.canvas.ax2.set_ylabel("degrees C", fontsize = 10)
+        self.canvas.ax2.grid(color='gray', linestyle='dotted')
         self.canvas.draw()   # redraw plot on canvas       
 
 # ---------------------------------------------------------------
