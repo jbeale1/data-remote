@@ -8,13 +8,15 @@ import adi
 import numpy as np
 from struct import unpack
 import sys
-import datetime
-import queue
-import threading
+import datetime      # time of day
+import queue         # transfer ADC data between threads
+import threading     # producer and consumer threads
+import time          # for time.sleep()
+import logging       # thread-safe log info
 
 
-setDur = 1.0      # duration of 1 set in seconds
-rate = 2000         # readings per second
+setDur = 0.5      # duration of 1 set in seconds
+rate = 10000         # readings per second
 samples = int(setDur * rate) # record this many points at one time
 
 saveDir = "C:/temp"         # directory to save logged data
@@ -53,38 +55,63 @@ def processData(q, samples, fout):
 # ----------------------------------------------------    
 # put the ADC data on the queue
 
-def getData(q, adc1):
-    for i in range(20):
-        data_raw = adc1.rx()  # retrieve one buffer of data using Pyadi-iio  
-        q.put((i,data_raw))
-
+def getData(q, eRun, eStop, adc1):
+    i = 0  # count of received data packets    
+    while (not eStop.is_set()):
+        while eRun.is_set():
+        #for i in range(20):
+            data_raw = adc1.rx()  # retrieve one buffer of data using Pyadi-iio  
+            q.put((i,data_raw))
+            i += 1
+    logging.debug('now finished getData')
+    
 # ----------------------------------------------------    
-# main program
+# --- Main Program starts here -----------------------
 
-q = queue.Queue()                       # create a queue object
-adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
+if __name__ == '__main__':
 
-now = datetime.datetime.now()
-fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
+    logging.basicConfig(level=logging.DEBUG,
+                    format='(%(threadName)-9s) %(message)s',)
+                    
+    q = queue.Queue()                   # create a queue object
+    eRun = threading.Event()            # event controls when data aq runs
+    eStop = threading.Event()           # event controls when data aq exits
+    
+    adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
 
-datfile = saveDir +"/" + fname        # use this file to save ADC readings 
-fout = open(datfile, "w")       # erase pre-existing file if any
-fout.write("Temperature\n")     # column header, to read as CSV
+    now = datetime.datetime.now()
+    fname = now.strftime('%Y%m%d_%H%M%S_log.csv')  # save data in this file
 
-# start thread that handles the data
-pworker = threading.Thread(target=processData, args=(q,samples,fout,), daemon=True)
-pworker.start()
+    datfile = saveDir +"/" + fname        # use this file to save ADC readings 
+    fout = open(datfile, "w")       # erase pre-existing file if any
+    fout.write("Temperature\n")     # column header, to read as CSV
 
-data_raw = adc1.rx()  # first buffer we just throw away (turn-on transient)
+    # start thread that handles the data   daemon=>does not block main thread exiting
+    pworker = threading.Thread(target=processData, args=(q,samples,fout,), daemon=True)
+    pworker.start()
 
-# start thread that acquires the data
-dataq_worker = threading.Thread(target=getData, args=(q,adc1,), daemon=True)
-dataq_worker.start()
+    data_raw = adc1.rx()  # first buffer we just throw away (turn-on transient)
 
-# possibly do main-program-like things here
+    # start thread that acquires the data
+    dataq_worker = threading.Thread(target=getData, args=(q,eRun,eStop,adc1,), daemon=True)
+    dataq_worker.start()
 
-dataq_worker.join()  # wait until data aquisition thread exits
-q.join()             # then wait until item in queue is processed
-fout.close()         # close out data log file
+    # ----------------------------------------------------    
+    # Producer and Consumer threads do all the work.
+    # Possibly do various main-program-like things here
+    
+    for j in range(15):
+        print("Starting up...")
+        eRun.set()   # start the data aq thread
+        time.sleep(2)
+        eRun.clear() # stop the data aq thread
+        print("Paused...")
+        time.sleep(1)        # simulate some process being too busy
 
-del adc1 # Clean up
+    eStop.set()          # tell data.aq thread to exit
+    dataq_worker.join()  # wait until data aquisition thread exits
+    q.join()             # then wait until item in queue is processed
+
+    fout.close()         # close out data log file
+
+    del adc1 # Clean up
