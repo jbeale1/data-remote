@@ -1,6 +1,6 @@
 # Acquire data from ADC using Pyadi-iio
 # Plot graph and save data
-# J.Beale 9/29/2022
+# J.Beale 9/30/2022
 
 import sys         # command-line arguments, if any
 import matplotlib  # plotting data on graphs
@@ -11,27 +11,33 @@ import adi         # Pyadi-iio interface to AD7124 ADC
 import numpy as np # array manipulations
 from struct import unpack  # extract words from packed binary buffer
 import math        # for constant 'e'
-
-matplotlib.use('Qt5Agg')
+import queue         # transfer ADC data between threads
+import threading     # producer and consumer threads
+import time          # for time.sleep()
+import logging       # thread-safe log info
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
+matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
+
 # ----------------------------------------------------    
-# Configure ADC settings
+# Configure Program Settings
 
 adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
 saveDir = "C:/temp"         # directory to save logged data
 
-setDur = 1.0       # duration of 1 dataset, in seconds
-rate = 1000         # readings per second
+setDur = 0.5       # duration of 1 dataset, in seconds
+rate = 100         # readings per second
 
+R = 10             # decimation ratio: points averaged together before saving
 samples = int(setDur * rate) # record this many points at one time
-R = 500            # decimation ratio: points averaged together before saving
 
-def initADC(rate, samples):
+# ----------------------------------------------------    
+# set up ADC chip through Pyadi-iio system
+
+def initADC(rate, samples, adc1_ip):
   adc1 = adi.ad7124(uri=adc1_ip)
   ad_channel = 0
   sc = adc1.scale_available
@@ -68,14 +74,30 @@ class MplCanvas(FigureCanvasQTAgg):
         # self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
+class Communicate(QtCore.QObject):  # create a custom signal indicating when data is received
+
+    gotData = QtCore.pyqtSignal()
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         
+        self.c = Communicate()               # to get the custom gotData signal
+        self.c.gotData.connect(self.update_plot)  # call this when data arrives
+        
+        
         self.Record = False                  # start out not recording
         self.Pause = False                   # start out not paused
+        self.rate = rate                     # ADC sampling rate
+        self.samples = samples               # how many ADC samples per packet
+        self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
+        
+        self.q = queue.Queue()                   # create a queue for ADC data
+        self.eRun = threading.Event()            # event controls when data aq runs
+        self.eStop = threading.Event()           # event controls when data aq exits
+                
 
         now = datetime.datetime.now()
         fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
@@ -97,13 +119,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(width, height)
         
         self.canvas = MplCanvas(self)
-        self._adc1 = initADC(rate, samples)  # initialize ADC chip        
+        #self._adc1 = initADC(rate, samples)  # initialize ADC chip        
 
         self.dataLog = np.array([])  # log for sub-sampled data
         self._plot_ref = None
 
-        self.update_plot()
-        self.show()              
         
         # set up GUI layout
         btnLayout = QtWidgets.QHBoxLayout()  # a horizontal bar of button controls
@@ -130,6 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.b5 = QtWidgets.QPushButton('Exit')
         self.b5.clicked.connect(self.doQuit)
         btnLayout.addWidget(self.b5)
+        btnLayout.addStretch(1)
 
         graphLayout = QtWidgets.QVBoxLayout()   # graph with its toollbar at top
         toolbar = NavigationToolbar(self.canvas, self)
@@ -143,19 +164,35 @@ class MainWindow(QtWidgets.QMainWindow):
         widget = QtWidgets.QWidget(self)
         widget.setLayout(outerLayout)        
         self.setCentralWidget(widget)
-                
-        # Setup a timer to trigger the redraw by calling update_plot.
-        self.timer = QtCore.QTimer()
-        self.timer.setInterval(int(setDur*1000))  # update after this many milliseconds
-        self.timer.timeout.connect(self.update_plot)
-        self.timer.start()                           
+                        
+        self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
+        
+        # start thread that acquires the data
+        #dataq_worker = threading.Thread(target=getData, args=(self.q,self.eRun,self.eStop,self.adc1,), daemon=True)
+        dataq_worker = threading.Thread(target=self.getData, daemon=True)
+        dataq_worker.start()  # start up the acquisition thread
+        
+        self.eRun.set()   # enable the data aq thread         
+        
+        
+    def getData(self):   # thread that acquires ADC data        
+        #logging.debug('getData startup')        
+        while (not self.eStop.is_set()):
+            while self.eRun.is_set():
+                data_raw = self.adc1.rx()   # retrieve one buffer of data using Pyadi-iio  
+                self.q.put(data_raw)
+                self.c.gotData.emit()       # tell main thread we've now got data
+                logging.debug('gotData...')        
+        #logging.debug('now finished getData')        
 
     def doPause(self):     
         if self.b2.isChecked():
             self.b2.setStyleSheet("background-color : azure4")    
+            #self.eRun.clear()  # stop acquisition loop
             self.Pause = True
         else:
             self.b2.setStyleSheet("background-color : " + self.b2baseColor)    
+            #self.eRun.set()  # restart acquisition loop
             self.Pause = False
             
     def doRecord(self):     
@@ -177,24 +214,34 @@ class MainWindow(QtWidgets.QMainWindow):
     def doReset(self):
         self.dataLog = np.array([])  # zero out data log
 
-    def doQuit(self):
-        self.close()
+    def doQuit(self):        
+        self.eRun.clear()  # stop acquisition loop
+        #time.sleep(1)      # wait for it to actually stop
+        self.eStop.set()   # send signal closing out acquisition thread
+        self.fout.close()  # close data logfile
+        self.close()       # close window
         
-    def update_plot(self):        
-        data_raw = self._adc1.rx()
-        fmt = "%dI" % samples
+    def update_plot(self):       
+        if self.eStop.is_set():  # no updates if stop signal set
+            return
+        #data_raw = self._adc1.rx()  # get ADC data direct from iio system
+        data_raw = self.q.get()
+        fmt = "%dI" % self.samples
+        yr = np.array( list(unpack(fmt, data_raw)) )
+
         now = datetime.datetime.now()
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
 
-        yr = np.array( list(unpack(fmt, data_raw)) )
         self.ydata = calcTemp(yr)  # convert raw readings into Temp, deg.C  
         self.dataLog = np.append(self.dataLog, self.ydata)  # save data in array   
 
         # save out downsampled version of data to a file on disk
         if (self.Record):
-            yD = self.ydata.reshape(-1, R).mean(axis=1) # average each set of R values        
+            if (R > 1):
+                yD = self.ydata.reshape(-1, R).mean(axis=1) # average each set of R values        
+            else:
+                yD = self.ydata
             np.savetxt(self.fout, yD, fmt='%+0.5f')  # save out readings to disk
-            # self.fout.write("# %s\n" % timeString)   # write out timestamp
             self.fout.flush()  # update file on disk
 
         if self._plot_ref is None:
@@ -219,8 +266,6 @@ class MainWindow(QtWidgets.QMainWindow):
             ypos = ymin + 1.01*yrange
             t = ax.text(xpos,ypos, timeString, style='italic', horizontalalignment='right')  # date,time string
             
-            #bb = t.get_window_extent(renderer=r).transformed(matplotlib.pyplot.gca().transData.inverted())
-            #width = bb.width
             
             totalPoints = len(self.dataLog)
             x2 = np.arange(totalPoints)
@@ -231,11 +276,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.ax2.set_ylabel("degrees C", fontsize = 10)
             self.canvas.ax2.grid(color='gray', linestyle='dotted')
             self.canvas.ax2.yaxis.set_major_formatter(fmt)
-            self.canvas.draw()   # redraw plot on canvas       
+            self.canvas.draw()   # redraw plot on canvas   
+            self.show()  # show the canvas
 
 # ---------------------------------------------------------------
+
+# logging.basicConfig(level=logging.DEBUG,format='(%(threadName)-9s) %(message)s',)
+
 app = QtWidgets.QApplication(sys.argv)
 w = MainWindow()
+
 app.exec_()
 
 # w.fout.close()  # close the output file, now we're done
