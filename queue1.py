@@ -12,18 +12,19 @@ import datetime
 import queue
 import threading
 
-setDur = 0.8      # duration of 1 set in seconds
-rate = 10         # readings per second
+
+setDur = 1.0      # duration of 1 set in seconds
+rate = 2000         # readings per second
 samples = int(setDur * rate) # record this many points at one time
 
-datfile = "tdat.csv"  # save ADC readings
-my_ip = "ip:analog.local" # local RPi with ADC
+saveDir = "C:/temp"         # directory to save logged data
+adc1_ip = "ip:analog.local" # local RPi with ADC
 
 # ----------------------------------------------------    
 # set up ADC chip through Pyadi-iio system
 
-def initADC(rate, samples):
-  adc1 = adi.ad7124(uri=my_ip)
+def initADC(rate, samples, adc1_ip):
+  adc1 = adi.ad7124(uri=adc1_ip)
   ad_channel = 0
   sc = adc1.scale_available
   adc1.channel[ad_channel].scale = sc[-1]  # get highest range
@@ -35,37 +36,55 @@ def initADC(rate, samples):
   return adc1
    
 # ----------------------------------------------------    
-# get the ADC data off the queue and process it
+# get the ADC data off the queue, display and save it
 
-def processData(q):
+def processData(q, samples, fout):
     while True:
-        yr = q.get()
-        #fmt = "%dI" % samples
-        #yr = np.array( list(unpack(fmt, data_raw)) )
-        print(yr)
-        q.task_done()
+        i,data_raw = q.get()
+        fmt = "%dI" % samples
+        yr = np.array( list(unpack(fmt, data_raw)) )
+        print(i,yr)
+        # yD = yr.reshape(-1, R).mean(axis=1) # average each set of R values        
+        #np.savetxt(fout, yr, fmt='%+0.5f')  # save out readings to disk        
+        np.savetxt(fout, yr, fmt='%d')  # save out readings to disk        
+        fout.flush()  # update file on disk
+        q.task_done()  # finished handling this queue item
+
+# ----------------------------------------------------    
+# put the ADC data on the queue
+
+def getData(q, adc1):
+    for i in range(20):
+        data_raw = adc1.rx()  # retrieve one buffer of data using Pyadi-iio  
+        q.put((i,data_raw))
 
 # ----------------------------------------------------    
 # main program
 
-adc1 = initADC(rate, samples)
+q = queue.Queue()                       # create a queue object
+adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
 
-# do the first run but ignore it, due to RC start transient
-data_raw = adc1.rx()  
+now = datetime.datetime.now()
+fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
 
-q = queue.Queue()  # create a queue object
+datfile = saveDir +"/" + fname        # use this file to save ADC readings 
+fout = open(datfile, "w")       # erase pre-existing file if any
+fout.write("Temperature\n")     # column header, to read as CSV
 
-# start the queue data processor
-worker = threading.Thread(target=processData, args=(q,), daemon=True)
-worker.start()
-print("worker started")
+# start thread that handles the data
+pworker = threading.Thread(target=processData, args=(q,samples,fout,), daemon=True)
+pworker.start()
 
-for i in range(100):
-    data_raw = adc1.rx()  # retrieve one buffer of data using Pyadi-iio  
-    fmt = "%dI" % samples
-    yr = np.array( list(unpack(fmt, data_raw)) )    
-    q.put(yr)
-    print("Put %d data on queue." % i)
+data_raw = adc1.rx()  # first buffer we just throw away (turn-on transient)
 
-q.join()
+# start thread that acquires the data
+dataq_worker = threading.Thread(target=getData, args=(q,adc1,), daemon=True)
+dataq_worker.start()
+
+# possibly do main-program-like things here
+
+dataq_worker.join()  # wait until data aquisition thread exits
+q.join()             # then wait until item in queue is processed
+fout.close()         # close out data log file
+
 del adc1 # Clean up
