@@ -1,5 +1,5 @@
-# Initial try at acquiring data with Pyadi-iio
-# and plotting with matplotlib under PyQt
+# Acquire data from ADC using Pyadi-iio
+# Plot graph and save data
 # J.Beale 9/29/2022
 
 import sys         # command-line arguments, if any
@@ -23,13 +23,13 @@ from matplotlib.figure import Figure
 # Configure ADC settings
 
 adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
-datfile = "C:/temp/ADC_data.csv"        # use this file to save ADC readings 
+saveDir = "C:/temp"         # directory to save logged data
 
 setDur = 1.0       # duration of 1 dataset, in seconds
-rate = 100         # readings per second
+rate = 1000         # readings per second
 
 samples = int(setDur * rate) # record this many points at one time
-R = 50            # decimation ratio: points averaged together before saving
+R = 500            # decimation ratio: points averaged together before saving
 
 def initADC(rate, samples):
   adc1 = adi.ad7124(uri=adc1_ip)
@@ -76,10 +76,15 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.Record = False                  # start out not recording
         self.Pause = False                   # start out not paused
+
+        now = datetime.datetime.now()
+        fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
+
+        datfile = saveDir +"/" + fname        # use this file to save ADC readings 
         
         self.fout = open(datfile, "w")       # erase pre-existing file if any
         self.fout.write("Temperature\n")     # column header, to read as CSV
-        now = datetime.datetime.now()
+
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
         # self.fout.write("# Program Start: %s\n" % timeString)
         self.fout.flush()
