@@ -25,7 +25,8 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------    
 # Configure Program Settings
 
-adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
+#adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
+adc1_ip = "ip:192.168.1.159" # local LAN RPi with attached ADC
 saveDir = "C:/temp"         # directory to save logged data
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
@@ -210,10 +211,15 @@ class MainWindow(QtWidgets.QMainWindow):
         time.sleep(self.aqTime+0.2)   # enough time for current acquisition to finish
         self.q.queue.clear()      # remove any old data packets in queue (of previous size)       
         self.aqTime = self.sb6.value()
-        self.rate = self.sb7.value()
-        self.R = self.sb9.value()
-        # print("Updating: self.rate = %d" % self.rate)
+        self.rate = self.sb7.value()        
         self.samples = int(self.aqTime * self.rate) # sampling rate; this many per second
+        Rnom = self.sb9.value()   # find best workable value for decimation ratio
+        Rtest = (samples / Rnom)  # this must be an integer
+        if (Rtest == int(Rtest)):
+            self.R = Rnom
+        self.sb9.setValue(self.R)
+        
+        # print("Updating: self.rate = %d" % self.rate)
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
         
