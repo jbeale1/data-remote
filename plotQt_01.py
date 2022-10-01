@@ -101,7 +101,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.eRun = threading.Event()            # event controls when data aq runs
         self.eStop = threading.Event()           # event controls when data aq exits
                 
-
+        self.rms1f = 0                       # RMS value after LP filter
+        self.rms1Filt = 0.1                  # RMS value low-pass filter factor
         now = datetime.datetime.now()
         fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
 
@@ -214,12 +215,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rate = self.sb7.value()        
         self.samples = int(self.aqTime * self.rate) # sampling rate; this many per second
         Rnom = self.sb9.value()   # find best workable value for decimation ratio
-        Rtest = (samples / Rnom)  # this must be an integer
-        if (Rtest == int(Rtest)):
+        rem = (self.samples % Rnom)    # decimation ratio must divide sample count evenly
+        #print("Time: %5.3f  rate: %d  samples: %d  Rnom: %d  remainder: %d" % 
+        #    (self.aqTime, self.rate, self.samples, Rnom, rem))
+        if (rem == 0):
             self.R = Rnom
         self.sb9.setValue(self.R)
-        
-        # print("Updating: self.rate = %d" % self.rate)
+                
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
         
@@ -299,25 +301,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.xdata = np.arange(1,len(self.ydata)+1)  # create a matching X axis        
 
         if ( not self.Pause):  # update graphs if we are not in paused mode
-            ax = self.canvas.axes   # axis for first plot
+            ax = self.canvas.axes   # axis for first plot (upper graph)
             ax.cla()  # clear old data
             fmt=ticker.ScalarFormatter(useOffset=False)
             fmt.set_scientific(False)  
             ax.scatter(self.xdata,self.ydata,s=2, color="green")  # show samples as points
-            self.canvas.axes.grid(color='gray', linestyle='dotted' )
-            self.canvas.axes.set_xlabel("samples", fontsize = 10)
-            self.canvas.axes.yaxis.set_major_formatter(fmt) # turn off Y offset mode
-            self.canvas.axes.set_title('Temperature vs Time', fontsize = 15)
+            ax.grid(color='gray', linestyle='dotted' )
+            ax.set_xlabel("samples", fontsize = 10)
+            ax.yaxis.set_major_formatter(fmt) # turn off Y offset mode
+            ax.set_title('Temperature vs Time', fontsize = 15)
             
+            rms1 = np.std(self.ydata)  # instantaneous std.dev. value
+            self.rms1f = (1.0-self.rms1Filt)*self.rms1f + self.rms1Filt*rms1  # low-pass filtered value
+            rmsString = ("%.2f mC RMS" % (self.rms1f*1E3))
+             
             ymin,ymax = self.canvas.axes.get_ylim() # find range of displayed values
             xmin,xmax = self.canvas.axes.get_xlim()
             yrange = ymax-ymin
             xrange = xmax-xmin
-            xpos = xmin + 1.0*xrange  # location for text annotation
-            ypos = ymin + 1.01*yrange
-            t = ax.text(xpos,ypos, timeString, style='italic', horizontalalignment='right')  # date,time string
+            xpos = xmin + 1.0*xrange  # location for time/date
+            xpos1 = xmin + 0.01*xrange  # location for time/date            
+            ypos = ymin + 1.01*yrange # top of chart
+            ax.text(xpos,ypos, timeString, style='italic', horizontalalignment='right')  # date,time string
+            ax.text(xpos1,ypos, rmsString, fontsize=12)
                         
-            totalPoints = len(self.dataLog)
+            totalPoints = len(self.dataLog)  # plot lower graph (accumulated points)
             x2 = np.arange(totalPoints)
             x2 = x2 * self.R * self.aqTime/self.samples
             self.canvas.ax2.cla()  # clear old data
