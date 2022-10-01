@@ -25,14 +25,15 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------    
 # Configure Program Settings
 
+version = "ADC Plot v0.14"   # this particular code version number
+
 #adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
 adc1_ip = "ip:192.168.1.159" # local LAN RPi with attached ADC
 saveDir = "C:/temp"         # directory to save logged data
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
 rate = 100         # readings per second
-
-R = 10             # decimation ratio: points averaged together before saving
+R = 25             # decimation ratio: points averaged together before saving
 samples = int(aqTime * rate) # record this many points at one time
 
 # ----------------------------------------------------    
@@ -93,7 +94,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rate = rate                     # ADC sampling rate
         self.aqTime = aqTime                 # duration of one ADC data packet (seconds)
         self.samples = samples               # how many ADC samples per packet
-        self.bSets = 8                       # how many packets across upper graph
+        self.bSets = 10                       # how many packets across upper graph
         self.bStart = 0                      # location of this packet on upper graph (batch)
         self.bEnd = self.samples
         self.R = R                           # decimation ratio (samples to average)
@@ -116,8 +117,8 @@ class MainWindow(QtWidgets.QMainWindow):
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
         # self.fout.write("# Program Start: %s\n" % timeString)
         self.fout.flush()
-        
-        self.setWindowTitle("ADC Plot v0.12")
+                
+        self.setWindowTitle(version)
         width = 1000  # fixed width of window
         height = 700
         self.setMinimumSize(width, height)
@@ -168,10 +169,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sb7.setValue(self.rate)  # how come 100 prints as 99?
         self.sb7.setSuffix(" sps")        
         btnLayout.addWidget(self.sb7)
-
-        self.b8 = QtWidgets.QPushButton('Update Config')  # load the new ADC config values
-        self.b8.clicked.connect(self.setup_update)
-        btnLayout.addWidget(self.b8)
         
         self.l9 = QtWidgets.QLabel("Avg")
         btnLayout.addWidget(self.l9)
@@ -180,6 +177,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sb9.setRange(1, 1000)   # range of possible averaging ratios
         self.sb9.setValue(self.R)  # how come 100 prints as 99?        
         btnLayout.addWidget(self.sb9)
+
+        self.la = QtWidgets.QLabel("Seg")
+        btnLayout.addWidget(self.la)
+
+        self.sba = QtWidgets.QSpinBox()  # set decimation ratio (samples to average)
+        self.sba.setRange(1, 100)   # range of possible segments
+        self.sba.setValue(self.bSets)
+        btnLayout.addWidget(self.sba)
+
+
+        self.b8 = QtWidgets.QPushButton('Update')  # load the new ADC config values
+        self.b8.clicked.connect(self.setup_update)
+        btnLayout.addWidget(self.b8)
         
         btnLayout.addStretch(1)
         self.b5 = QtWidgets.QPushButton('Quit')  # last button is to quit
@@ -224,6 +234,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.bStart = 0                      # location of this packet on upper graph (batch)
         self.bEnd = self.samples
+        self.bSets = self.sba.value()        # how many sets in upper graph batch
         self.batch = np.zeros(self.samples*self.bSets)    # data points of upper plot (fixed time span)                
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
