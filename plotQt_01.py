@@ -88,12 +88,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.c = Communicate()               # to get the custom gotData signal
         self.c.gotData.connect(self.update_plot)  # call update_plot whenever data arrives
         
-        
         self.Record = False                  # start out not recording
         self.Pause = False                   # start out not paused
         self.rate = rate                     # ADC sampling rate
         self.aqTime = aqTime                 # duration of one ADC data packet (seconds)
         self.samples = samples               # how many ADC samples per packet
+        self.bSets = 8                       # how many packets across upper graph
+        self.bStart = 0                      # location of this packet on upper graph (batch)
+        self.bEnd = self.samples
         self.R = R                           # decimation ratio (samples to average)
         self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
         
@@ -115,17 +117,16 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.fout.write("# Program Start: %s\n" % timeString)
         self.fout.flush()
         
-        self.setWindowTitle("ADC Plot v0.11")
+        self.setWindowTitle("ADC Plot v0.12")
         width = 1000  # fixed width of window
         height = 700
-        #self.setFixedWidth(width)
-        #self.setFixedHeight(height)
         self.setMinimumSize(width, height)
         
         self.canvas = MplCanvas(self)
         #self._adc1 = initADC(rate, samples)  # initialize ADC chip        
 
-        self.dataLog = np.array([])  # log for sub-sampled data
+        self.batch = np.zeros(self.samples*self.bSets)    # data points of upper plot (fixed time span)
+        self.dataLog = np.array([])  # data points for lower plot, maybe sub-sampled
         self._plot_ref = None
 
         
@@ -216,12 +217,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.samples = int(self.aqTime * self.rate) # sampling rate; this many per second
         Rnom = self.sb9.value()   # find best workable value for decimation ratio
         rem = (self.samples % Rnom)    # decimation ratio must divide sample count evenly
-        #print("Time: %5.3f  rate: %d  samples: %d  Rnom: %d  remainder: %d" % 
-        #    (self.aqTime, self.rate, self.samples, Rnom, rem))
+        # print("%d, %d, %d" % (self.samples, Rnom, rem))
         if (rem == 0):
             self.R = Rnom
         self.sb9.setValue(self.R)
-                
+        
+        self.bStart = 0                      # location of this packet on upper graph (batch)
+        self.bEnd = self.samples
+        self.batch = np.zeros(self.samples*self.bSets)    # data points of upper plot (fixed time span)                
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
         
@@ -296,16 +299,25 @@ class MainWindow(QtWidgets.QMainWindow):
         if (self.Record):
             np.savetxt(self.fout, yD, fmt='%+0.5f')  # save out readings to disk
             self.fout.flush()  # update file on disk
-
-        #if self._plot_ref is None:
-        self.xdata = np.arange(1,len(self.ydata)+1)  # create a matching X axis        
+        
 
         if ( not self.Pause):  # update graphs if we are not in paused mode
+        
+            self.xdata = np.arange(1,len(self.batch)+1)  # create a matching X axis        
+            bEdge = self.samples * self.bSets  # right-most point on top "batch" graph
+            # print("%d, %d, %d" %(self.bStart,self.bEnd, bEdge))
+            self.batch[self.bStart:self.bEnd] = self.ydata
+            self.bStart += self.samples
+            self.bEnd += self.samples
+            if (self.bEnd > bEdge):
+                self.bStart = 0
+                self.bEnd = self.samples
             ax = self.canvas.axes   # axis for first plot (upper graph)
             ax.cla()  # clear old data
             fmt=ticker.ScalarFormatter(useOffset=False)
             fmt.set_scientific(False)  
-            ax.scatter(self.xdata,self.ydata,s=2, color="green")  # show samples as points
+            #ax.scatter(self.xdata,self.ydata,s=2, color="green")  # show samples as points
+            ax.scatter(self.xdata,self.batch,s=2, color="green")  # show samples as points
             ax.grid(color='gray', linestyle='dotted' )
             ax.set_xlabel("samples", fontsize = 10)
             ax.yaxis.set_major_formatter(fmt) # turn off Y offset mode
