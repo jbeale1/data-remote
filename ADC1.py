@@ -1,6 +1,6 @@
 # Acquire data from ADC using Pyadi-iio
 # Plot graph and save data
-# J.Beale 9/30/2022
+# J.Beale 10/04/2022
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
@@ -39,16 +39,24 @@ samples = int(aqTime * rate) # record this many points at one time
 # set up ADC chip through Pyadi-iio system
 
 def initADC(rate, samples, adc1_ip):
-  adc1 = adi.ad7124(uri=adc1_ip)
-  #phy = adc1.ctx.find_device("ad7124-8")
-  ad_channel = 0
-  sc = adc1.scale_available
-  adc1.channel[ad_channel].scale = sc[-1]  # get highest range
-  scale = adc1.channel[ad_channel].scale
-  adc1.sample_rate = rate  # sets sample rate for all channels
-  adc1.rx_buffer_size = samples
-  adc1.rx_enabled_channels = [ad_channel]
-  adc1._ctx.set_timeout(1000000)  # in what units is this?
+
+  try:
+    adc1 = adi.ad7124(uri=adc1_ip)
+  except Exception as e:
+    print("Attempt to open '%s' had error: " % adc1_ip,end="")
+    print(e)
+    adc1 = None 
+  if (adc1 is not None):  
+      #phy = adc1.ctx.find_device("ad7124-8")
+      ad_channel = 0
+      sc = adc1.scale_available
+      adc1.channel[ad_channel].scale = sc[-1]  # get highest range
+      scale = adc1.channel[ad_channel].scale
+      adc1.sample_rate = rate  # sets sample rate for all channels
+      adc1.rx_buffer_size = samples
+      adc1.rx_enabled_channels = [ad_channel]
+      adc1._ctx.set_timeout(1000000)  # in what units is this?
+  
   #addr = 0x19  # CONFIG_0 register
   #reg = phy.reg_read(addr)  # read reguster
   #print("Before: {0:02x}: {1:02x}".format(addr, reg))
@@ -111,9 +119,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         
-        self.c = Communicate()               # to get the custom gotData signal
-        self.c.gotData.connect(self.update_plot)  # call update_plot whenever data arrives
-        
         self.saveDir = saveDir               # directory to save data in
         self.Record = False                  # start out not recording
         self.Pause = False                   # start out not paused
@@ -125,6 +130,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bEnd = self.samples
         self.R = R                           # decimation ratio (samples to average)
         self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
+
+        self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
+        if (self.adc1 is None):
+            print("Error: unable to connect to ADC %s" % self.adc1_ip)
+            self.close()
+            sys.exit()                       # leave entire program
+        
+        self.c = Communicate()               # to get the custom gotData signal
+        self.c.gotData.connect(self.update_plot)  # call update_plot whenever data arrives
         
         self.q = queue.Queue()                   # create a queue for ADC data
         self.eRun = threading.Event()            # event controls when data aq runs
@@ -227,7 +241,6 @@ class MainWindow(QtWidgets.QMainWindow):
         widget.setLayout(outerLayout)        
         self.setCentralWidget(widget)
                         
-        self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         
         # start thread that acquires the data
         dataq_worker = threading.Thread(target=self.getData, daemon=True)
