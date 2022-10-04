@@ -3,6 +3,8 @@
 # J.Beale 9/30/2022
 
 import sys         # command-line arguments, if any
+import os          # test if directory is writable
+import pathlib     # find current working directory
 import matplotlib  # plotting data on graphs
 import matplotlib.pyplot
 import matplotlib.ticker as ticker  # turn off Y offset mode
@@ -25,9 +27,8 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Plot v0.15"   # this particular code version number
+version = "ADC Plot v0.15  (4-Oct-2022)"   # this particular code version number
 
-saveDir = "."         # directory to save logged data
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
 rate = 100         # readings per second
@@ -113,6 +114,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.c = Communicate()               # to get the custom gotData signal
         self.c.gotData.connect(self.update_plot)  # call update_plot whenever data arrives
         
+        self.saveDir = saveDir               # directory to save data in
         self.Record = False                  # start out not recording
         self.Pause = False                   # start out not paused
         self.rate = rate                     # ADC sampling rate
@@ -130,17 +132,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 
         self.rms1f = 0                       # RMS value after LP filter
         self.rms1Filt = 0.1                  # RMS value low-pass filter factor
+
         now = datetime.datetime.now()
-        fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
-
-        datfile = saveDir +"/" + fname        # use this file to save ADC readings 
-        
-        self.fout = open(datfile, "w")       # erase pre-existing file if any
-        self.fout.write("mV\n")     # column header, to read as CSV
-
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
-        # self.fout.write("# Program Start: %s\n" % timeString)
-        self.fout.flush()
                 
         self.setWindowTitle(version)
         width = 1000  # fixed width of window
@@ -289,15 +283,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self.Record = True
             now = datetime.datetime.now()
             timeString = now.strftime('%Y-%m-%d %H:%M:%S')
-            self.fout.write("# Start: %s\n" % timeString)
+            fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
+            datfile = self.saveDir +"/" + fname        # use this file to save ADC readings       
+            self.fout = open(datfile, "w")       # erase pre-existing file if any
+            self.fout.write("mV\n")     # column header, to read as CSV            
+            #self.fout.write("# Start: %s\n" % timeString)
+            self.fout.flush()
 
         else:
             self.b3.setStyleSheet("background-color : " + self.b3baseColor)    
             self.Record = False
             now = datetime.datetime.now()
             timeString = now.strftime('%Y-%m-%d %H:%M:%S')
-            self.fout.write("# End: %s\n\n" % timeString)
-            self.fout.flush()
+            self.fout.write("# End: %s\n\n" % timeString)            
+            self.fout.close()
         
     def doReset(self):
         self.dataLog = np.array([])  # zero out data log
@@ -306,7 +305,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.Pause = True  # stop GUI update
         self.eRun.clear()  # stop acquisition loop
         self.eStop.set()   # send signal closing out acquisition thread
-        self.fout.close()  # close data logfile
+        try:
+            self.fout.close()  # close data logfile, if it was ever opened
+        except:
+            pass           # no file opened
         self.close()       # close window
         
     def update_plot(self):       
@@ -395,14 +397,26 @@ if __name__ == "__main__":
 
     #ADC_IP = "192.168.1.202"
     ADC_IP = "analog.local"
+    saveDir = "."         # By default, save logged data in current directory
        
+    print(version)        # this program version       
     argc = len(sys.argv)
     if (argc > 1):
         ADC_IP = sys.argv[1]  # takes one argument, the IP address of target device            
-                
+        
     adc1_ip = "ip:"+ADC_IP       # local LAN RPi with attached ADC
+    print("Using ADC device IP:%s" % ADC_IP)
 
-    print("Opening ADC device IP:%s" % ADC_IP)
+    if (argc > 2):
+        saveDir = sys.argv[2]  # takes one argument, the IP address of target device
+        print("Data save directory: %s" % saveDir)
+    else:
+        thisDir = pathlib.Path().resolve()
+        print("Data save directory: %s" % thisDir)
+                
+    if (not os.access(saveDir, os.W_OK)):
+        print("Error: directory '%s' is not writable." % saveDir)
+        sys.exit()
 
     app = QtWidgets.QApplication([])
     w = MainWindow()
