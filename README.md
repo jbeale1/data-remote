@@ -9,3 +9,5 @@ Example pipeline:
   
 Example video:
 https://www.youtube.com/watch?v=nQR6z1zPdEM
+
+![ADC plot screenshot](https://github.com/jbeale1/data-remote/blob/main/ADC-Plot-v014.png)
