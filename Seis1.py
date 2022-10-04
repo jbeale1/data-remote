@@ -25,12 +25,13 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Plot v0.14"   # this particular code version number
+version = "ADC Plot v0.15"   # this particular code version number
 
 #adc1_ip = "ip:analog.local" # local LAN RPi with attached ADC
 #adc1_ip = "ip:192.168.1.159" # local LAN RPi with attached ADC
 adc1_ip = "ip:192.168.1.202" # local LAN RPi with attached ADC
-saveDir = "C:/temp"         # directory to save logged data
+
+saveDir = "."         # directory to save logged data
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
 rate = 100         # readings per second
@@ -42,6 +43,7 @@ samples = int(aqTime * rate) # record this many points at one time
 
 def initADC(rate, samples, adc1_ip):
   adc1 = adi.ad7124(uri=adc1_ip)
+  phy = adc1.ctx.find_device("ad7124-8")
   ad_channel = 0
   sc = adc1.scale_available
   adc1.channel[ad_channel].scale = sc[-1]  # get highest range
@@ -50,6 +52,14 @@ def initADC(rate, samples, adc1_ip):
   adc1.rx_buffer_size = samples
   adc1.rx_enabled_channels = [ad_channel]
   adc1._ctx.set_timeout(1000000)  # in what units is this?
+  #addr = 0x19  # CONFIG_0 register
+  #reg = phy.reg_read(addr)  # read reguster
+  #print("Before: {0:02x}: {1:02x}".format(addr, reg))
+  #phy.reg_write(addr, 0x810)  # write to register 
+  #reg = phy.reg_read(addr)  # read it back
+  #print("After: {0:02x}: {1:02x}".format(addr, reg))
+
+
   return adc1
   
 # ----------------------------------------------------    
@@ -317,7 +327,8 @@ class MainWindow(QtWidgets.QMainWindow):
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
 
         volts = calcVolt(yr)  # convert raw readings into Temp, deg.C          
-        self.ydata = calcSeis(volts)  # integrate and filter data
+        #self.ydata = calcSeis(volts)  # integrate and filter data
+        self.ydata = volts
 
         if (self.R > 1):  # decimate (average & downsample)
             yD = self.ydata.reshape(-1, self.R).mean(axis=1) # average each set of R values        
@@ -352,7 +363,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ax.grid(color='gray', linestyle='dotted' )
             ax.set_xlabel("samples", fontsize = 10)
             ax.yaxis.set_major_formatter(fmt) # turn off Y offset mode
-            ax.set_title('Temperature vs Time', fontsize = 15)
+            ax.set_title('Voltage vs Time', fontsize = 15)
             
             rms1 = np.std(self.ydata)  # instantaneous std.dev. value
             self.rms1f = (1.0-self.rms1Filt)*self.rms1f + self.rms1Filt*rms1  # low-pass filtered value
@@ -375,7 +386,7 @@ class MainWindow(QtWidgets.QMainWindow):
             #self.canvas.ax2.scatter(x2, self.dataLog, s=1)   # plot of accumulated past data
             self.canvas.ax2.plot(x2, self.dataLog, linewidth=1)   # plot of accumulated past data
             self.canvas.ax2.set_xlabel("seconds", fontsize = 10)
-            self.canvas.ax2.set_ylabel("degrees C", fontsize = 10)
+            self.canvas.ax2.set_ylabel("Volts", fontsize = 10)
             self.canvas.ax2.grid(color='gray', linestyle='dotted')
             self.canvas.ax2.yaxis.set_major_formatter(fmt)
             self.canvas.draw()   # redraw plot on canvas   
