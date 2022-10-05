@@ -46,6 +46,7 @@ def initADC(rate, samples, adc1_ip):
     print("Attempt to open '%s' had error: " % adc1_ip,end="")
     print(e)
     adc1 = None 
+    
   if (adc1 is not None):  
       #phy = adc1.ctx.find_device("ad7124-8")
       ad_channel = 0
@@ -63,7 +64,6 @@ def initADC(rate, samples, adc1_ip):
   #phy.reg_write(addr, 0x810)  # write to register 
   #reg = phy.reg_read(addr)  # read it back
   #print("After: {0:02x}: {1:02x}".format(addr, reg))
-
 
   return adc1
   
@@ -414,6 +414,13 @@ if __name__ == "__main__":
        
     print(version)        # this program version       
     argc = len(sys.argv)
+    if (argc < 2):      # with no arguments, just print help message
+        print("Usage: %s <IP_address> [<output_directory>]" % sys.argv[0])
+        print("  <IP_address> : domain name, eg. 'analog.local' or IP address of host with ADC")
+        print("  <output_directory> : where to store recorded data, defaults to current directory\n")
+        print("Example:\n   %s 192.168.1.202 C:/temp \n" % sys.argv[0])
+        sys.exit()
+        
     if (argc > 1):
         ADC_IP = sys.argv[1]  # takes one argument, the IP address of target device            
         
