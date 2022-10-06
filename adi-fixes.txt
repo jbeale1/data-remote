@@ -1,0 +1,32 @@
+changes to Raspberry Pi for Data Acquisition with AD7124 chip:
+-----------------------------------------------------
+
+FIX #1 at line 74 in file:  /usr/local/lib/python3.9/dist-packages/adi/ad7124.py
+
+
+sudo nano /usr/local/lib/python3.9/dist-packages/adi/ad7124.py
+
+edit line 74 of this file to use ".channels" instead of "._channels":
+
+old:     for ch in self._ctrl._channels:
+
+new:     for ch in self._ctrl.channels:
+
+-------------------------------------------------
+FIX #2 in lines 337-344 in file  /usr/local/lib/python3.9/dist-packages/adi/rx_tx.py
+
+sudo nano /usr/local/lib/python3.9/dist-packages/adi/rx_tx.py
+
+comment out by adding '#' to beginning of each of these lines starting at 337:
+
+        # x = np.frombuffer(data, dtype=self._rx_data_type)
+        # if self._rx_mask != 0:
+        #     x = np.bitwise_and(x, self._rx_mask)
+        # if self._rx_shift > 0:
+        #     x = np.right_shift(x, self._rx_shift)
+        # elif self._rx_shift < 0:
+        #    x = np.left_shift(x, -(self._rx_shift))
+
+on line 344, add this line (be careful about the Python difference between tabs and spaces)
+
+       x = data
