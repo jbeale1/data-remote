@@ -19,7 +19,7 @@ import signal       # handle control-C
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Record v0.1  (7-Oct-2022)"   # this particular code version number
+version = "ADC Record v0.11  (7-Oct-2022)"   # this particular code version number
 
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
@@ -177,8 +177,8 @@ if __name__ == "__main__":
     samples = int(aqTime * rate)    # record this many points at one time
     now = datetime.datetime.now()
     timeString = now.strftime('%Y-%m-%d %H:%M:%S')
-    fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
-    datfile = saveDir +"/" + fname        # use this file to save ADC readings       
+    fname = now.strftime('%Y%m%d_%H%M%S_log')
+    datfile = saveDir +"/" + fname + ("_%d.csv" % rate)       # use this file to save ADC readings       
     print("recording to file: %s  at %d sps, dur %.3f sec"  % (datfile,rate,aqTime))
         
     fout = open(datfile, "w")       # erase pre-existing file if any
