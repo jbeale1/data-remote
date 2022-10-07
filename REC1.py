@@ -1,6 +1,6 @@
 # Acquire data from ADC using Pyadi-iio
-# Plot graph and save data
-# J.Beale 10/04/2022
+# save data to file on disk
+# J.Beale 10/07/2022
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
