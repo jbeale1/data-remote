@@ -5,21 +5,14 @@
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
 import pathlib     # find current working directory
-import matplotlib  # plotting data on graphs
-import matplotlib.pyplot
-import matplotlib.ticker as ticker  # turn off Y offset mode
 import datetime    # current date & time
 import adi         # Pyadi-iio interface to AD7124 ADC
 import numpy as np # array manipulations
 from struct import unpack  # extract words from packed binary buffer
 import math        # for constant 'e'
 import queue         # transfer ADC data between threads
-import threading     # producer and consumer threads
 import time          # for time.sleep()
 
-from PyQt5 import QtCore, QtGui, QtWidgets
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
 
 import signal       # handle control-C
 
