@@ -21,18 +21,18 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
+import signal       # handle control-C
 
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Plot v0.15  (4-Oct-2022)"   # this particular code version number
+version = "ADC Record v0.1  (7-Oct-2022)"   # this particular code version number
 
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
 rate = 1000         # readings per second
 R = 1             # decimation ratio: points averaged together before saving
-samples = int(aqTime * rate) # record this many points at one time
+totalPoints = 0                 # total points recorded so far        
 
 # ----------------------------------------------------    
 # set up ADC chip through Pyadi-iio system
@@ -59,6 +59,16 @@ def initADC(rate, samples, adc1_ip):
   
   return adc1
   
+def signal_handler(sig, frame):
+    now = datetime.datetime.now()
+    timeString = now.strftime('%Y-%m-%d %H:%M:%S')
+    print('\nProgram stopped at %s' % timeString)
+    fout.write('# Program stopped at %s' % timeString)
+    print("Total data points: %d" % totalPoints)
+    fout.close()    
+    sys.exit(0)
+
+
 # ----------------------------------------------------    
 # calculate temp in deg.C from ADC reading of thermistor
 
@@ -94,40 +104,35 @@ def calcSeis(volts):
 
 
 def runADC():
+        global totalPoints     # how many points we've seen
         
-        self.saveDir = saveDir               # directory to save data in
-        self.Record = False                  # start out not recording
-        self.Pause = False                   # start out not paused
-        self.rate = rate                     # ADC sampling rate
-        self.aqTime = aqTime                 # duration of one ADC data packet (seconds)
-        self.samples = samples               # how many ADC samples per packet
-        self.bSets = 10                       # how many packets across upper graph
-        self.bStart = 0                      # location of this packet on upper graph (batch)
-        self.bEnd = self.samples
-        self.R = R                           # decimation ratio (samples to average)
-        self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
-
-        self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
-        if (self.adc1 is None):
-            print("Error: unable to connect to ADC %s" % self.adc1_ip)
-            self.close()
+        adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
+        if (adc1 is None):
+            print("Error: unable to connect to ADC %s" % adc1_ip)
+            close()
             sys.exit()                       # leave entire program
-
-        now = datetime.datetime.now()
-        timeString = now.strftime('%Y-%m-%d %H:%M:%S')
         
-        fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
-        datfile = self.saveDir +"/" + fname        # use this file to save ADC readings       
+        fout.write("mV\n")     # column header, to read as CSV            
+        fout.flush()
         
-        self.fout = open(datfile, "w")       # erase pre-existing file if any
-        self.fout.write("mV\n")     # column header, to read as CSV            
-        self.fout.flush()
-        
+        packets = 0
         while ( True ):
-            data_raw = self.adc1.rx()   # retrieve one buffer of data using Pyadi-iio  
-            fmt = "%dI" % self.samples
+          try:
+            data_raw = adc1.rx()   # retrieve one buffer of data using Pyadi-iio  
+            fmt = "%dI" % samples
             yr = np.array( list(unpack(fmt, data_raw)) )
-            np.savetxt(self.fout, yr*1000, fmt='%0.5f')  # save out readings to disk in mV
+            vdat = calcVolt(yr)
+            totalPoints += len(vdat)
+            mV = vdat * 1000
+            np.savetxt(fout, mV, fmt='%0.5f')  # save out readings to disk in mV
+            print("%.3f" % mV[0],end=" ", flush=True)
+            packets += 1
+            if (packets % 10) == 0:
+              print()
+          except Exception as e:
+            print("Had error:")
+            print(e)
+            break
         
 
 # ---------------------------------------------------------------
@@ -141,10 +146,14 @@ if __name__ == "__main__":
     print(version)        # this program version       
     argc = len(sys.argv)
     if (argc < 2):      # with no arguments, just print help message
-        print("Usage: %s <IP_address> [<output_directory>]" % sys.argv[0])
+        print("Usage: %s <IP_address> [<output_directory>] [<msec_aq>] [<sample_rate>]" % sys.argv[0])
         print("  <IP_address> : domain name, eg. 'analog.local' or IP address of host with ADC")
-        print("  <output_directory> : where to store recorded data, defaults to current directory\n")
-        print("Example:\n   %s 192.168.1.202 C:/temp \n" % sys.argv[0])
+        print("  <output_directory> : where to store recorded data, defaults to current directory")
+        print("  <msec_aq> : how many milliseconds for each acquisition (default 500 msec)")
+        print("  <sample_rate> : how many samples per second (default 1000 samples per second)")
+        print()
+        
+        print("Example:\n   %s 192.168.1.202 C:/temp 500 1000\n" % sys.argv[0])
         sys.exit()
         
     if (argc > 1):
@@ -153,6 +162,11 @@ if __name__ == "__main__":
     adc1_ip = "ip:"+ADC_IP       # local LAN RPi with attached ADC
     print("Using ADC device IP:%s" % ADC_IP)
 
+    if (argc > 4):        
+        rate = int(sys.argv[4])
+    if (argc > 3):
+        msec = int(sys.argv[3])
+        aqTime = msec / 1000.0
     if (argc > 2):
         saveDir = sys.argv[2]  # takes one argument, the IP address of target device
         print("Data save directory: %s" % saveDir)
@@ -163,5 +177,17 @@ if __name__ == "__main__":
     if (not os.access(saveDir, os.W_OK)):
         print("Error: directory '%s' is not writable." % saveDir)
         sys.exit()
+
+    signal.signal(signal.SIGINT, signal_handler)  # handle SIGINT from Control-C
+    #signal.pause()
+
+    samples = int(aqTime * rate)    # record this many points at one time
+    now = datetime.datetime.now()
+    timeString = now.strftime('%Y-%m-%d %H:%M:%S')
+    fname = now.strftime('%Y%m%d_%H%M%S_log.csv')
+    datfile = saveDir +"/" + fname        # use this file to save ADC readings       
+    print("recording to file: %s  at %d sps, dur %.3f sec"  % (datfile,rate,aqTime))
+        
+    fout = open(datfile, "w")       # erase pre-existing file if any
 
     runADC()
