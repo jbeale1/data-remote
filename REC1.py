@@ -19,7 +19,7 @@ import signal       # handle control-C
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Record v0.11  (7-Oct-2022)"   # this particular code version number
+version = "ADC Record v0.11  (8-Oct-2022)"   # this particular code version number
 
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
@@ -59,6 +59,7 @@ def signal_handler(sig, frame):
     fout.write('# Program stopped at %s' % timeString)
     print("Total data points: %d" % totalPoints)
     fout.close()    
+    print("Data filename: %s" % datfile)
     sys.exit(0)
 
 
@@ -121,7 +122,11 @@ def runADC():
             print("%.3f" % mV[0],end=" ", flush=True)
             packets += 1
             if (packets % 10) == 0:
-              print()
+                avg = np.average(mV)
+                std = np.std(mV)
+                now = datetime.datetime.now()
+                time = now.strftime('%H:%M:%S')
+                print("Time:%s avg: %.3f std: %.3f" % (time, avg, std))
           except Exception as e:
             print("Had error:")
             print(e)
@@ -140,13 +145,13 @@ if __name__ == "__main__":
     argc = len(sys.argv)
     if (argc < 2):      # with no arguments, just print help message
         print("Usage: %s <IP_address> [<output_directory>] [<msec_aq>] [<sample_rate>]" % sys.argv[0])
-        print("  <IP_address> : domain name, eg. 'analog.local' or IP address of host with ADC")
+        print("  <IP_address> : domain name, eg. 'analog.local' or IP address of host eg. '192.168.1.202'")
         print("  <output_directory> : where to store recorded data, defaults to current directory")
         print("  <msec_aq> : how many milliseconds for each acquisition (default 500 msec)")
         print("  <sample_rate> : how many samples per second (default 1000 samples per second)")
         print()
         
-        print("Example:\n   %s 192.168.1.202 C:/temp 500 1000\n" % sys.argv[0])
+        print("Example:\n   %s analog C:/temp 500 1000\n" % sys.argv[0])
         sys.exit()
         
     if (argc > 1):
@@ -180,6 +185,7 @@ if __name__ == "__main__":
     fname = now.strftime('%Y%m%d_%H%M%S_log')
     datfile = saveDir +"/" + fname + ("_%d.csv" % rate)       # use this file to save ADC readings       
     print("recording to file: %s  at %d sps, dur %.3f sec"  % (datfile,rate,aqTime))
+    print("Type control-C to stop recording")
         
     fout = open(datfile, "w")       # erase pre-existing file if any
 
