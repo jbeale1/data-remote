@@ -1,6 +1,8 @@
+#!/usr/bin/env python
+
 # Acquire data from ADC using Pyadi-iio
 # Plot graph and save data
-# J.Beale 11/07/2022
+# J.Beale 11/08/2022
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
@@ -27,7 +29,7 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------
 # Configure Program Settings
 
-version = "ADC Plot v0.21  (7-Nov-2022)"   # this particular code version number
+version = "ADC Plot v0.22  (8-Nov-2022)"   # this particular code version number
 
 
 aqTime = 1.0      # duration of 1 dataset, in seconds
@@ -112,6 +114,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bStart = 0                      # location of start of this packet on graph (batch)
         self.bEnd = int(self.samples / R)         # location of end of this packet
         self.R = R                           # decimation ratio (samples to average)
+
         self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
 
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
@@ -143,6 +146,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of upper plot (fixed time span)
         #self.dataLog = np.array([])  # data points for lower plot, maybe sub-sampled
+        self.xdata = np.arange(0,len(self.batch))  # create an X axis vector for the plot
+        self.xdata = self.xdata * (self.R/self.rate)  # scale to units of seconds
+
         self._plot_ref = None
 
 
@@ -249,7 +255,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bStart = 0                      # location of start of this packet on graph (batch)
         self.bEnd = int(self.samples / self.R)         # location of end of this packet
         self.bSets = self.sba.value()        # how many sets in upper graph batch
-        self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of upper plot (fixed time span)
+        self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of fixed time span plot
+        self.xdata = np.arange(0,len(self.batch))  # create an X axis vector for the plot
+        self.xdata = self.xdata * (self.R/self.rate)  # scale to units of seconds
+
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
 
@@ -342,8 +351,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
         if ( not self.Pause):  # update graphs if we are not in paused mode
-
-            self.xdata = np.arange(1,len(self.batch)+1)  # create a matching X axis
+            
             bEdge = (self.samples * self.bSets / self.R)  # right-most point on top "batch" graph
             # print("%d, %d, %d" %(self.bStart,self.bEnd, bEdge))
             self.batch[self.bStart:self.bEnd] = yD
@@ -360,7 +368,7 @@ class MainWindow(QtWidgets.QMainWindow):
             #ax.scatter(self.xdata,self.batch,s=1, color="green")  # show samples as points
             ax.plot(self.xdata,self.batch, linewidth=1, color="green")  # show samples as lines
             ax.grid(color='gray', linestyle='dotted' )
-            ax.set_xlabel("samples", fontsize = 10)
+            ax.set_xlabel("seconds", fontsize = 10)
             ax.yaxis.set_major_formatter(fmt) # turn off Y offset mode
             ax.set_title('Voltage vs Time', fontsize = 15)
 
@@ -407,6 +415,8 @@ if __name__ == "__main__":
 
     print(version)        # this program version
     argc = len(sys.argv)
+    
+    #if ( False ):
     if (argc < 2):      # with no arguments, just print help message
         print("Usage: %s <IP_address> [<output_directory>]" % sys.argv[0])
         print("  <IP_address> : domain name, eg. 'analog.local' or IP address of host with ADC")
