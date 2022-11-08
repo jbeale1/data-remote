@@ -1,6 +1,6 @@
 # Acquire data from ADC using Pyadi-iio
 # Plot graph and save data
-# J.Beale 11/07/2022
+# J.Beale 10/04/2022
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
@@ -27,12 +27,12 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------
 # Configure Program Settings
 
-version = "ADC Plot v0.20  (7-Nov-2022)"   # this particular code version number
+version = "ADC Plot v0.15  (4-Oct-2022)"   # this particular code version number
 
 
-aqTime = 1.0      # duration of 1 dataset, in seconds
-rate = 10000         # readings per second
-R = 10             # decimation ratio: points averaged together before saving
+aqTime = 0.50      # duration of 1 dataset, in seconds
+rate = 100         # readings per second
+R = 1             # decimation ratio: points averaged together before saving
 samples = int(aqTime * rate) # record this many points at one time
 
 # ----------------------------------------------------
@@ -70,25 +70,43 @@ def initADC(rate, samples, adc1_ip):
 # ----------------------------------------------------
 # calculate temp in deg.C from ADC reading of thermistor
 
+KtoC = -273.15   # add this to K to get degrees C
+Kref = 25 - KtoC # thermistor reference temp in K
+Beta = 3380 # for Murata 10k 1% NXRT15XH103FA1B020
+Rinf = 1E4 * math.e**(-Beta / (Kref))
 Vref = 2.500 # voltage of ADC reference
 
 avgMean = 0.004136345  # long-term filtered mean
 mLPF = 0.01       # low-pass filter constant
 
+def calcTemp(rawADC):
+    f = rawADC / (2**24)       # ADC as fraction of full-scale
+    R = (2E4 * f) / (1.0 - f)  # resistance in ohms
+    Rf = R / Rinf
+    T = (Beta / np.log(Rf)) + KtoC
+    return T
 
 def calcVolt(rawADC):
     V = Vref * rawADC / (2**24)       # ADC as fraction of full-scale
     return V
+
+def calcSeis(volts):
+    global avgMean
+    avgMean = (1-mLPF)*avgMean + mLPF*np.average(volts)
+    detrend = volts - avgMean
+    # print(avgMean)
+    seis = np.cumsum(detrend)
+    return seis
 
 # ----------------------------------------------------
 
 class MplCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None, width=9, height=7, dpi=100):
-        #fig, (self.axes, self.ax2) = matplotlib.pyplot.subplots(2,1) # two plots vertically
-        #fig.set_size_inches(width, height)
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
+        fig, (self.axes, self.ax2) = matplotlib.pyplot.subplots(2,1) # two plots vertically
+        fig.set_size_inches(width, height)
+        # fig = Figure(figsize=(width, height), dpi=dpi)
+        # self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
 class Communicate(QtCore.QObject):  # create a custom signal indicating when data is received
@@ -107,10 +125,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rate = rate                     # ADC sampling rate
         self.aqTime = aqTime                 # duration of one ADC data packet (seconds)
         self.samples = samples               # how many ADC samples per packet
-        self.bSets = 5                       # how many packets across upper graph
-        self.rCount = 0                      # how many packets recorded to file
-        self.bStart = 0                      # location of start of this packet on graph (batch)
-        self.bEnd = int(self.samples / R)         # location of end of this packet
+        self.bSets = 10                       # how many packets across upper graph
+        self.bStart = 0                      # location of this packet on upper graph (batch)
+        self.bEnd = self.samples
         self.R = R                           # decimation ratio (samples to average)
         self.adc1_ip = adc1_ip               # local LAN RPi with attached ADC
 
@@ -141,7 +158,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas = MplCanvas(self)
         #self._adc1 = initADC(rate, samples)  # initialize ADC chip
 
-        self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of upper plot (fixed time span)
+        self.batch = np.zeros(self.samples*self.bSets)    # data points of upper plot (fixed time span)
         self.dataLog = np.array([])  # data points for lower plot, maybe sub-sampled
         self._plot_ref = None
 
@@ -317,11 +334,9 @@ class MainWindow(QtWidgets.QMainWindow):
         fmt = "%dI" % self.samples
         yr = np.array( list(unpack(fmt, data_raw)) )
 
-        sRec = (self.rCount * aqTime)   # recorded data duration in seconds
         now = datetime.datetime.now()
         timeString = now.strftime('%Y-%m-%d %H:%M:%S')
-        timeString = ("Rec:%.1fs    " % sRec) + timeString  # add "Seconds Recorded" to time
-        
+
         volts = calcVolt(yr)  # convert raw readings into Temp, deg.C
         #self.ydata = calcSeis(volts)  # integrate and filter data
         self.ydata = volts
@@ -330,28 +345,25 @@ class MainWindow(QtWidgets.QMainWindow):
             yD = self.ydata.reshape(-1, self.R).mean(axis=1) # average each set of R values
         else:
             yD = self.ydata
+        self.dataLog = np.append(self.dataLog, yD)  # add new data to cumulative array
 
-        # self.dataLog = np.append(self.dataLog, yD)  # add new data to ever-larger cumulative array
-
-        # save out data to a file on disk
+        # save out downsampled version of data to a file on disk
         if (self.Record):
-            np.savetxt(self.fout, self.ydata*1000, fmt='%0.5f')  # save out readings to disk in mV
+            np.savetxt(self.fout, yD*1000, fmt='%0.5f')  # save out readings to disk in mV
             self.fout.flush()  # update file on disk
-            self.rCount += 1   # increment count of recorded data
-            # print("Seconds Recorded: %5.1f" % (self.rCount * aqTime))  # DEBUG
 
 
         if ( not self.Pause):  # update graphs if we are not in paused mode
 
             self.xdata = np.arange(1,len(self.batch)+1)  # create a matching X axis
-            bEdge = (self.samples * self.bSets / self.R)  # right-most point on top "batch" graph
+            bEdge = self.samples * self.bSets  # right-most point on top "batch" graph
             # print("%d, %d, %d" %(self.bStart,self.bEnd, bEdge))
-            self.batch[self.bStart:self.bEnd] = yD
-            self.bStart += int(self.samples / self.R)
-            self.bEnd += int(self.samples / self.R)
+            self.batch[self.bStart:self.bEnd] = self.ydata
+            self.bStart += self.samples
+            self.bEnd += self.samples
             if (self.bEnd > bEdge):
                 self.bStart = 0
-                self.bEnd = int(self.samples / self.R)
+                self.bEnd = self.samples
             ax = self.canvas.axes   # axis for first plot (upper graph)
             ax.cla()  # clear old data
             fmt=ticker.ScalarFormatter(useOffset=False)
@@ -366,8 +378,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
             rms1 = np.std(self.ydata)  # instantaneous std.dev. value
             self.rms1f = (1.0-self.rms1Filt)*self.rms1f + self.rms1Filt*rms1  # low-pass filtered value
-            
-            #rmsString = ("%.3f mV RMS   R:%.1fs" % (self.rms1f*1E3, sRec))
             rmsString = ("%.3f mV RMS" % (self.rms1f*1E3))
 
             ymin,ymax = self.canvas.axes.get_ylim() # find range of displayed values
@@ -380,7 +390,6 @@ class MainWindow(QtWidgets.QMainWindow):
             ax.text(xpos,ypos, timeString, style='italic', horizontalalignment='right')  # date,time string
             ax.text(xpos1,ypos, rmsString, fontsize=12)
 
-            """
             totalPoints = len(self.dataLog)  # plot lower graph (accumulated points)
             x2 = np.arange(totalPoints)
             x2 = x2 * self.R * self.aqTime/self.samples
@@ -391,8 +400,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.ax2.set_ylabel("Volts", fontsize = 10)
             self.canvas.ax2.grid(color='gray', linestyle='dotted')
             self.canvas.ax2.yaxis.set_major_formatter(fmt)
-            """
-            
             self.canvas.draw()   # redraw plot on canvas
             self.show()  # show the canvas
 
