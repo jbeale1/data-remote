@@ -27,7 +27,7 @@ matplotlib.use('Qt5Agg')   # connect matplotlib to PyQt5
 # ----------------------------------------------------
 # Configure Program Settings
 
-version = "ADC Plot v0.20  (7-Nov-2022)"   # this particular code version number
+version = "ADC Plot v0.21  (7-Nov-2022)"   # this particular code version number
 
 
 aqTime = 1.0      # duration of 1 dataset, in seconds
@@ -142,7 +142,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #self._adc1 = initADC(rate, samples)  # initialize ADC chip
 
         self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of upper plot (fixed time span)
-        self.dataLog = np.array([])  # data points for lower plot, maybe sub-sampled
+        #self.dataLog = np.array([])  # data points for lower plot, maybe sub-sampled
         self._plot_ref = None
 
 
@@ -246,10 +246,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.R = Rnom
         self.sb9.setValue(self.R)
 
-        self.bStart = 0                      # location of this packet on upper graph (batch)
-        self.bEnd = self.samples
+        self.bStart = 0                      # location of start of this packet on graph (batch)
+        self.bEnd = int(self.samples / self.R)         # location of end of this packet
         self.bSets = self.sba.value()        # how many sets in upper graph batch
-        self.batch = np.zeros(self.samples*self.bSets)    # data points of upper plot (fixed time span)
+        self.batch = np.zeros(int(self.samples*self.bSets/self.R))    # data points of upper plot (fixed time span)
         self.adc1 = initADC(self.rate, self.samples, self.adc1_ip)  # initialize ADC with configuration
         self.eRun.set()     # restart acquistion loop
 
