@@ -2,7 +2,7 @@
 
 # Acquire data from ADC using Pyadi-iio
 # save data to file on disk
-# J.Beale 10/07/2022
+# J.Beale 12/1/2023
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
@@ -22,7 +22,7 @@ import signal       # handle control-C
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Record v0.32  (01-Dec-2023)"   # this particular code version number
+version = "ADC Record v0.33  (01-Dec-2023)"   # this particular code version number
 
 
 aqTime = 0.50      # duration of 1 dataset, in seconds
