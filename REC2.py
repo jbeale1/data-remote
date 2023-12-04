@@ -186,10 +186,14 @@ if __name__ == "__main__":
 
     # ----- GPIO pin config ----
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(IN1_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(IN1_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # external input #1
+    GPIO.setup(IN2_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # external input #2
     GPIO.setup(LED_GPIO, GPIO.OUT)
     GPIO.add_event_detect(IN1_GPIO, GPIO.RISING,
             callback=button_callback, bouncetime=20)
+    GPIO.add_event_detect(IN2_GPIO, GPIO.RISING,
+            callback=button_callback, bouncetime=20)
+
     signal.signal(signal.SIGINT, signal_handler)  # control-C
     # ------------
     outState1 = False
