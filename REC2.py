@@ -46,13 +46,15 @@ def button_callback(channel):
     global outState1, outState2
     global tDelta1, tDelta2
     global tOld1, tOld2
+
+    tNow = time.time_ns()
     if channel == IN1_GPIO:
         outState1 = True        # will be set low in main loop        
-        tDelta1 = (time.time_ns() - tOld1) / 1.0E6 # convert ns to msec
+        tDelta1 = (tNow - tOld1) / 1.0E6 # convert ns to msec
         tOld1 = tNow
-    if channel == IN12_GPIO:
+    if channel == IN2_GPIO:
         outState2 = True        # will be set low in main loop        
-        tDelta2 = (time.time_ns() - tOld1) / 1.0E6 # convert ns to msec
+        tDelta2 = (tNow - tOld1) / 1.0E6 # convert ns to msec
         tOld2 = tNow
 
 
