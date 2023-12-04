@@ -2,7 +2,7 @@
 
 # Acquire data from ADC using Pyadi-iio
 # save data to file on disk
-# J.Beale 12/1/2023
+# J.Beale 12/4/2023
 
 import sys         # command-line arguments, if any
 import os          # test if directory is writable
@@ -22,17 +22,18 @@ import signal       # handle control-C
 # ----------------------------------------------------    
 # Configure Program Settings
 
-version = "ADC Record v0.33  (01-Dec-2023)"   # this particular code version number
+version = "ADC Record v0.34  (04-Dec-2023)"   # this particular code version number
 
 
-aqTime = 0.50      # duration of 1 dataset, in seconds
+aqTime = 0.50       # duration of 1 dataset, in seconds
 rate = 1000         # readings per second
-R = 1             # decimation ratio: points averaged together before saving
+R = 1               # decimation ratio: points averaged together before saving
 totalPoints = 0                 # total points recorded so far        
 
 # --------------------------------------------
 
-BUTTON_GPIO = 20 # RPi connector pin 38
+IN1_GPIO = 20    # Signal1 on RPi connector pin 38
+IN2_GPIO = 16    # Signal2 on RPi connector pin 36
 LED_GPIO = 21    # BR corner of RPi connector, pin 40
 
 # Control-C interrupt handler - program exits from here
@@ -42,14 +43,17 @@ def signal_handler(sig, frame):
 
 # GPIO signal input handler. 'channel' param is GPIO number, eg 20
 def button_callback(channel):
-    global outState
-    global tDelta
-    global tOld
-    if channel == BUTTON_GPIO:
-        outState = True        # will be set low in main loop
-        tNow = time.time_ns()
-        tDelta = (tNow - tOld) / 1.0E6 # convert ns to msec
-        tOld = tNow
+    global outState1, outState2
+    global tDelta1, tDelta2
+    global tOld1, tOld2
+    if channel == IN1_GPIO:
+        outState1 = True        # will be set low in main loop        
+        tDelta1 = (time.time_ns() - tOld1) / 1.0E6 # convert ns to msec
+        tOld1 = tNow
+    if channel == IN12_GPIO:
+        outState2 = True        # will be set low in main loop        
+        tDelta2 = (time.time_ns() - tOld1) / 1.0E6 # convert ns to msec
+        tOld2 = tNow
 
 
 # ----------------------------------------------------    
@@ -124,7 +128,7 @@ def calcSeis(volts):
 
 def runADC():
         global totalPoints     # how many points we've seen
-        global outState        # flag indicating unhandled GPIO input edge
+        global outState1, outState2        # flag indicating unhandled GPIO input edge
         
         adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
         if (adc1 is None):
@@ -152,10 +156,15 @@ def runADC():
             
 
             print("%.3f" % mV[0],end=" ", flush=True)
-            if outState:
-                fout.write(", %5.1f\n" % tDelta) # GPIO edge time delta, to file
-                print(", %5.1f, " % tDelta,end="") # GPIO edge time delta from prior, to display
-                outState = False
+            if outState1:
+                fout.write(", %5.1f\n" % tDelta1) # GPIO edge time delta, to file
+                print("T1, %5.1f, " % tDelta1) # GPIO edge time delta from prior, to display
+                outState1 = False
+
+            if outState2:
+                fout.write(",, %5.1f\n" % tDelta2) # GPIO edge time delta, to file
+                print("T2, %5.1f, " % tDelta2) # GPIO edge time delta from prior, to display
+                outState2 = False
 
             packets += 1
             if (packets % dispLines) == 0:
@@ -177,15 +186,19 @@ if __name__ == "__main__":
 
     # ----- GPIO pin config ----
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(BUTTON_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(IN1_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
     GPIO.setup(LED_GPIO, GPIO.OUT)
-    GPIO.add_event_detect(BUTTON_GPIO, GPIO.RISING,
+    GPIO.add_event_detect(IN1_GPIO, GPIO.RISING,
             callback=button_callback, bouncetime=20)
     signal.signal(signal.SIGINT, signal_handler)  # control-C
     # ------------
-    outState = False
-    tOld = time.time_ns()  # time since epoch, in nanoseconds
-    tDelta = 0             # time delta between GPIO input edges
+    outState1 = False
+    outState2 = False
+    tOld1 = time.time_ns()  # time since epoch, in nanoseconds
+    tOld2 = tOld1
+    tDelta1 = 0             # time delta between GPIO input edges
+    tDelta2 = 0
+
 
 
     ADC_IP = "analog.local"
