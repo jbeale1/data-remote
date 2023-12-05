@@ -1,4 +1,7 @@
 #!/usr/bin/env python3          
+
+# Test Python GPIO input via callback
+# J.Beale 4-Dec-2023
                                 
 import signal                   
 import sys
@@ -38,7 +41,11 @@ GPIO.add_event_detect(BUTTON_GPIO, GPIO.RISING,
             callback=button_callback, bouncetime=20)
 signal.signal(signal.SIGINT, signal_handler)
 
-while True:
+maxSamples = int(2E7)  # how many data points to record
+
+with open('pulseLog.csv', 'w') as fout:
+    fout.write("idx, sec\n")
+
     gChannel = 0
     outState = False
     tOld = time.time_ns()  # time since epoch, in nanoseconds
@@ -46,12 +53,13 @@ while True:
     warm = False    # true when code is synced to input pulse
     count = 0    # how many pulses received
     dIdx = 0     # index into data array
-    maxSamples = 20  # how many data points to record
 
-    dat = np.zeros(maxSamples, dtype=float, order='C')
+    # dat = np.zeros(maxSamples, dtype=float, order='C')
 
     oldState = True
     dStart = datetime.now()   # date/time at start
+    print("Start: %s" % dStart.strftime("%Y-%m-%d %H:%M:%S"))
+    fout.write(("# Start: %s\n" % dStart.strftime("%Y-%m-%d %H:%M:%S")))
 
     while dIdx < maxSamples:
         if outState:
@@ -62,9 +70,11 @@ while True:
         if (oldState != outState):
             tSec = tDelta / 1.0E9
             tDif = int((1.0 - tSec)*1.0E6) # microseconds of jitter
-            # print("%d, %d, %d, %5.6f, %d" % (count, dIdx, outState, tSec, tDif))
+            print("%d, %5.6f" % (count, tSec))
+            fout.write("%d, %5.6f\n" % (count, tSec))
+
             if warm:
-                dat[dIdx] = tDif
+                #dat[dIdx] = tDif
                 dIdx += 1
             else:
                 if (count == 2):
@@ -73,16 +83,17 @@ while True:
             oldState = outState
             count += 1
 
-        time.sleep(0.02)
+        time.sleep(0.005)
 
     # ----------------------------------------------------
+    """
     now = datetime.now()
-    print("%s : %s  avg = %5.3f st.dev = %5.3f  min=%5.3f max=%5.3f" % 
+    print(# "%s : %s  avg = %5.3f st.dev = %5.3f  min=%5.3f max=%5.3f" % 
         (
          dStart.strftime("%Y-%m-%d %H:%M:%S"),
          now.strftime("%Y-%m-%d %H:%M:%S"),
          np.mean(dat), np.std(dat), np.min(dat), np.max(dat)) )
-
+    """
     # never reached
     # signal.pause()
     # ----------------------------------------------------
