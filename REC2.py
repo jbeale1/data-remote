@@ -33,7 +33,8 @@ totalPoints = 0                 # total points recorded so far
 # --------------------------------------------
 
 IN1_GPIO = 20    # Signal1 on RPi connector pin 38
-IN2_GPIO = 16    # Signal2 on RPi connector pin 36
+IN2_GPIO = 24    # Signal2 on RPi connector pin 18
+#IN2_GPIO = 16    # Signal2 on RPi connector pin 36
 LED_GPIO = 21    # BR corner of RPi connector, pin 40
 
 # Control-C interrupt handler - program exits from here
