@@ -44,16 +44,19 @@ def signal_handler(sig, frame):
 # GPIO signal input handler. 'channel' param is GPIO number, eg 20
 def button_callback(channel):
     global outState1, outState2
+    global outLevel1, outLevel2
     global tDelta1, tDelta2
     global tOld1, tOld2
 
     tNow = time.time_ns()
     if channel == IN1_GPIO:
-        outState1 = True        # will be set low in main loop        
+        outState1 = True                        # flag indicating change; set low in main loop
+        outLevel1 = GPIO.input(IN1_GPIO)        # record current level of this GPIO pin
         tDelta1 = (tNow - tOld1) / 1.0E6 # convert ns to msec
         tOld1 = tNow
     if channel == IN2_GPIO:
-        outState2 = True        # will be set low in main loop        
+        outState2 = True                        # will be set low in main loop        
+        outLevel2 = GPIO.input(IN2_GPIO)        # will be set low in main loop        
         tDelta2 = (tNow - tOld2) / 1.0E6 # convert ns to msec
         tOld2 = tNow
 
@@ -95,42 +98,22 @@ def signal_handler(sig, frame):
 
 
 # ----------------------------------------------------    
-# calculate temp in deg.C from ADC reading of thermistor
-
-KtoC = -273.15   # add this to K to get degrees C
-Kref = 25 - KtoC # thermistor reference temp in K
-Beta = 3380 # for Murata 10k 1% NXRT15XH103FA1B020
-Rinf = 1E4 * math.e**(-Beta / (Kref))
 Vref = 2.500 # voltage of ADC reference
 
 avgMean = 0.004136345  # long-term filtered mean
 mLPF = 0.01       # low-pass filter constant
 
-def calcTemp(rawADC):  
-    f = rawADC / (2**24)       # ADC as fraction of full-scale
-    R = (2E4 * f) / (1.0 - f)  # resistance in ohms
-    Rf = R / Rinf
-    T = (Beta / np.log(Rf)) + KtoC
-    return T  
-
 def calcVolt(rawADC):  
     V = Vref * rawADC / (2**24)       # ADC as fraction of full-scale
     return V
     
-def calcSeis(volts):
-    global avgMean
-    avgMean = (1-mLPF)*avgMean + mLPF*np.average(volts)
-    detrend = volts - avgMean
-    # print(avgMean)
-    seis = np.cumsum(detrend)
-    return seis
-
 # ----------------------------------------------------    
 
 
 def runADC():
         global totalPoints     # how many points we've seen
         global outState1, outState2        # flag indicating unhandled GPIO input edge
+        global outLevel1, outLevel2
         
         adc1 = initADC(rate, samples, adc1_ip)  # initialize ADC with configuration
         if (adc1 is None):
@@ -144,7 +127,7 @@ def runADC():
         packets = 0
         int1High = False
 
-        dispLines = 20  # how many packets per line to display on terminal while running
+        dispLines = 10  # how many packets per line to display on terminal while running
         while ( True ):
           try:
             data_raw = adc1.rx()   # retrieve one buffer of data using Pyadi-iio  	
@@ -155,18 +138,31 @@ def runADC():
             totalPoints += len(vdat)
             mV = vdat * 1000
             np.savetxt(fout, mV, fmt='%0.5f')  # save out readings to disk in mV
-            
 
-            print("%.3f" % mV[0],end=" ", flush=True)
+            print("%.2f" % mV[0],end=" ", flush=True)
             if outState1:
-                fout.write(", %5.1f\n" % tDelta1) # GPIO edge time delta, to file
-                print("T1, %5.1f, " % tDelta1) # GPIO edge time delta from prior, to display
-                outState1 = False
+              if outLevel1:
+                fout.write(", ")  # 2nd column: input1 went high
+                print("T1H, ",end="")
+              else:
+                fout.write(",, ") # 3rd column, input1 went low
+                print("T1L, ",end="")
+
+              fout.write("%5.1f\n" % tDelta1) # GPIO edge time delta, to file
+              # print("%5.1f, " % tDelta1) # GPIO edge time delta from prior, to display
+              outState1 = False
 
             if outState2:
-                fout.write(",, %5.1f\n" % tDelta2) # GPIO edge time delta, to file
-                print("T2, %5.1f, " % tDelta2) # GPIO edge time delta from prior, to display
-                outState2 = False
+              if outLevel2:
+                fout.write(",,, ") # 4th column: input2 went high
+                print("T2H, ",end="")
+              else:
+                fout.write(",,,, ") # 5th column: input2 went low
+                print("T2L, ",end="")
+
+              fout.write("%5.1f\n" % tDelta2) # GPIO edge time delta, to file
+              # print("%5.1f, " % tDelta2) # GPIO edge time delta from prior, to display
+              outState2 = False
 
             packets += 1
             if (packets % dispLines) == 0:
@@ -192,16 +188,19 @@ if __name__ == "__main__":
     GPIO.setup(IN1_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # external input #1
     GPIO.setup(IN2_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # external input #2
     GPIO.setup(LED_GPIO, GPIO.OUT)
-    GPIO.add_event_detect(IN1_GPIO, GPIO.RISING,
+    GPIO.add_event_detect(IN1_GPIO, GPIO.BOTH,
             callback=button_callback, bouncetime=20)
-    GPIO.add_event_detect(IN2_GPIO, GPIO.RISING,
+    GPIO.add_event_detect(IN2_GPIO, GPIO.BOTH,
             callback=button_callback, bouncetime=20)
 
 
     signal.signal(signal.SIGINT, signal_handler)  # control-C
     # ------------
-    outState1 = False
+    outState1 = False  # if this pin had a state change
     outState2 = False
+    outLevel1 = False  # GPIO level after most recent change
+    outLevel2 = False
+
     tOld1 = time.time_ns()  # time since epoch, in nanoseconds
     tOld2 = tOld1
     tDelta1 = 0             # time delta between GPIO input edges
